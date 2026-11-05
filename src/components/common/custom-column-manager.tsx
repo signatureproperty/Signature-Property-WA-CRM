@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import type { CustomField, CustomFieldType } from '@/types';
+import type { CustomField, CustomFieldType, AccountColumnSetting } from '@/types';
+import {
+  DEFAULT_CONTACT_COLUMNS_DEF,
+  DEFAULT_LISTING_COLUMNS_DEF,
+  buildUnifiedContactColumns,
+  buildUnifiedListingColumns,
+  type ColumnDefinition,
+} from '@/lib/columns/column-settings';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +37,8 @@ import {
   Columns3,
   X,
   Check,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 interface CustomColumnManagerProps {
@@ -48,11 +57,14 @@ export function CustomColumnManager({
   const supabase = createClient();
   const { user, accountId } = useAuth();
 
-  const [fields, setFields] = useState<CustomField[]>([]);
   const [loading, setLoading] = useState(true);
+  const [columns, setColumns] = useState<ColumnDefinition[]>([]);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [columnSettings, setColumnSettings] = useState<AccountColumnSetting[]>([]);
 
-  // Form state
-  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  // Form state (for creating or editing)
+  const [editingColId, setEditingColId] = useState<string | null>(null);
+  const [isEditingDefault, setIsEditingDefault] = useState(false);
   const [fieldName, setFieldName] = useState('');
   const [fieldType, setFieldType] = useState<CustomFieldType>('text');
   const [options, setOptions] = useState<string[]>([]);
@@ -62,44 +74,66 @@ export function CustomColumnManager({
 
   const entityTitle = entityType === 'listing' ? 'Property Listings' : 'Contacts';
 
-  const fetchFields = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!accountId) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('custom_fields')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('entity_type', entityType)
-      .order('field_name');
+    try {
+      const [customRes, settingsRes] = await Promise.all([
+        supabase
+          .from('custom_fields')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('entity_type', entityType)
+          .order('field_name'),
+        supabase
+          .from('account_column_settings')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('entity_type', entityType),
+      ]);
 
-    if (!error && data) {
-      setFields(data as CustomField[]);
+      const cFields = (customRes.data as CustomField[]) || [];
+      const cSettings = (settingsRes.data as AccountColumnSetting[]) || [];
+
+      setCustomFields(cFields);
+      setColumnSettings(cSettings);
+
+      const unified =
+        entityType === 'contact'
+          ? buildUnifiedContactColumns(cFields, cSettings)
+          : buildUnifiedListingColumns(cFields, cSettings);
+
+      setColumns(unified);
+    } catch (err) {
+      console.error('[custom-column-manager] error fetching data:', err);
+      toast.error('Failed to load columns.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [accountId, entityType, supabase]);
 
   useEffect(() => {
     if (open && accountId) {
-      fetchFields();
+      fetchData();
       resetForm();
     }
-  }, [open, accountId, fetchFields]);
+  }, [open, accountId, fetchData]);
 
   function resetForm() {
-    setEditingFieldId(null);
+    setEditingColId(null);
+    setIsEditingDefault(false);
     setFieldName('');
     setFieldType('text');
     setOptions([]);
     setNewOptionInput('');
   }
 
-  function handleStartEdit(field: CustomField) {
-    setEditingFieldId(field.id);
-    setFieldName(field.field_name);
-    setFieldType((field.field_type as CustomFieldType) || 'text');
-    const existingOpts =
-      (field.field_options as { options?: string[] })?.options || [];
-    setOptions(existingOpts);
+  function handleStartEdit(col: ColumnDefinition) {
+    setEditingColId(col.id);
+    setIsEditingDefault(col.isDefault);
+    setFieldName(col.label);
+    setFieldType(col.fieldType);
+    setOptions(col.options || []);
     setNewOptionInput('');
   }
 
@@ -121,7 +155,7 @@ export function CustomColumnManager({
   async function handleSaveField() {
     const name = fieldName.trim();
     if (!name) {
-      toast.error('Column name is required.');
+      toast.error('Column name cannot be empty.');
       return;
     }
 
@@ -130,29 +164,27 @@ export function CustomColumnManager({
       return;
     }
 
-    // Check duplicate name
-    const isDuplicate = fields.some(
-      (f) =>
-        f.id !== editingFieldId &&
-        f.field_name.toLowerCase() === name.toLowerCase()
-    );
-    if (isDuplicate) {
-      toast.error(`A column named "${name}" already exists.`);
-      return;
-    }
-
-    if (fieldType === 'select' && options.length === 0) {
-      toast.error('Please add at least one dropdown option.');
-      return;
-    }
-
     setSaving(true);
     try {
-      const fieldOptionsPayload =
-        fieldType === 'select' ? { options } : {};
+      if (editingColId && isEditingDefault) {
+        // Editing a Default System Column (Renaming its display label)
+        const { error } = await supabase.from('account_column_settings').upsert(
+          {
+            account_id: accountId,
+            entity_type: entityType,
+            column_id: editingColId,
+            label: name,
+            is_deleted: false,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'account_id,entity_type,column_id' }
+        );
 
-      if (editingFieldId) {
-        // Update existing field
+        if (error) throw error;
+        toast.success(`Column renamed to "${name}".`);
+      } else if (editingColId && !isEditingDefault) {
+        // Updating an existing Custom Field
+        const fieldOptionsPayload = fieldType === 'select' ? { options } : {};
         const { error } = await supabase
           .from('custom_fields')
           .update({
@@ -160,12 +192,28 @@ export function CustomColumnManager({
             field_type: fieldType,
             field_options: fieldOptionsPayload,
           })
-          .eq('id', editingFieldId);
+          .eq('id', editingColId);
 
         if (error) throw error;
         toast.success(`Column "${name}" updated.`);
       } else {
-        // Create new field
+        // Creating a new Custom Field
+        if (fieldType === 'select' && options.length === 0) {
+          toast.error('Please add at least one dropdown option.');
+          setSaving(false);
+          return;
+        }
+
+        const isDuplicate = columns.some(
+          (c) => c.label.toLowerCase() === name.toLowerCase() && !c.isDeleted
+        );
+        if (isDuplicate) {
+          toast.error(`A column named "${name}" already exists.`);
+          setSaving(false);
+          return;
+        }
+
+        const fieldOptionsPayload = fieldType === 'select' ? { options } : {};
         const { error } = await supabase.from('custom_fields').insert({
           account_id: accountId,
           user_id: user.id,
@@ -180,7 +228,7 @@ export function CustomColumnManager({
       }
 
       resetForm();
-      await fetchFields();
+      await fetchData();
       onFieldsChanged?.();
     } catch (err: unknown) {
       console.error('[custom-column-manager] save error:', err);
@@ -190,26 +238,55 @@ export function CustomColumnManager({
     }
   }
 
-  async function handleDeleteField(field: CustomField) {
+  async function handleDeleteColumn(col: ColumnDefinition) {
+    if (col.required) {
+      toast.error(
+        `"${col.label}" is a required core column and cannot be deleted. You can rename it if needed.`
+      );
+      return;
+    }
+
     if (
       !window.confirm(
-        `Are you sure you want to delete column "${field.field_name}"? Existing data in this column will be removed.`
+        col.isDefault
+          ? `Are you sure you want to remove column "${col.label}"? It will be hidden from tables and forms (you can restore it anytime).`
+          : `Are you sure you want to delete custom column "${col.label}"? Existing custom data in this column will be removed.`
       )
     ) {
       return;
     }
 
-    setDeletingId(field.id);
+    setDeletingId(col.id);
     try {
-      const { error } = await supabase
-        .from('custom_fields')
-        .delete()
-        .eq('id', field.id);
+      if (col.isDefault) {
+        // Default column: mark as is_deleted = true in account_column_settings
+        const { error } = await supabase.from('account_column_settings').upsert(
+          {
+            account_id: accountId,
+            entity_type: entityType,
+            column_id: col.id,
+            label: col.label,
+            is_deleted: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'account_id,entity_type,column_id' }
+        );
 
-      if (error) throw error;
-      toast.success(`Column "${field.field_name}" deleted.`);
-      if (editingFieldId === field.id) resetForm();
-      await fetchFields();
+        if (error) throw error;
+        toast.success(`Column "${col.label}" removed.`);
+      } else {
+        // Custom column: delete from custom_fields
+        const { error } = await supabase
+          .from('custom_fields')
+          .delete()
+          .eq('id', col.id);
+
+        if (error) throw error;
+        toast.success(`Column "${col.label}" deleted.`);
+      }
+
+      if (editingColId === col.id) resetForm();
+      await fetchData();
       onFieldsChanged?.();
     } catch (err: unknown) {
       console.error('[custom-column-manager] delete error:', err);
@@ -218,6 +295,37 @@ export function CustomColumnManager({
       setDeletingId(null);
     }
   }
+
+  async function handleRestoreColumn(col: ColumnDefinition) {
+    if (!accountId) return;
+    setDeletingId(col.id);
+    try {
+      const { error } = await supabase.from('account_column_settings').upsert(
+        {
+          account_id: accountId,
+          entity_type: entityType,
+          column_id: col.id,
+          label: col.label,
+          is_deleted: false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'account_id,entity_type,column_id' }
+      );
+
+      if (error) throw error;
+      toast.success(`Column "${col.label}" restored!`);
+      await fetchData();
+      onFieldsChanged?.();
+    } catch (err) {
+      console.error('[custom-column-manager] restore error:', err);
+      toast.error('Failed to restore column.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const activeColumns = columns.filter((c) => !c.isDeleted);
+  const deletedColumns = columns.filter((c) => c.isDeleted);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -228,8 +336,7 @@ export function CustomColumnManager({
             Manage {entityTitle} Columns
           </DialogTitle>
           <DialogDescription className="text-muted-foreground text-xs">
-            Create, edit, or delete custom columns with text or dropdown options.
-            These columns will appear in your table, filter views, and Add/Edit forms.
+            Create new custom columns, or edit and remove default columns. All changes immediately sync with your table and forms.
           </DialogDescription>
         </DialogHeader>
 
@@ -238,9 +345,13 @@ export function CustomColumnManager({
           <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground">
-                {editingFieldId ? 'Edit Column' : 'Add New Column'}
+                {editingColId
+                  ? isEditingDefault
+                    ? `Rename Default Column: ${fieldName}`
+                    : 'Edit Custom Column'
+                  : 'Add New Column'}
               </span>
-              {editingFieldId && (
+              {editingColId && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -253,46 +364,63 @@ export function CustomColumnManager({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                  Column Name
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  Column Name / Label
                 </label>
                 <Input
                   value={fieldName}
                   onChange={(e) => setFieldName(e.target.value)}
-                  placeholder="e.g. Budget, Investor, Area"
-                  className="bg-muted text-foreground h-8 text-xs"
+                  placeholder="e.g. Asking Price, City, Area"
+                  className="h-8 text-xs bg-background border-border"
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                  Column Type
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  Data Type
                 </label>
-                <Select
-                  value={fieldType}
-                  onValueChange={(val) => setFieldType(val as CustomFieldType)}
-                >
-                  <SelectTrigger className="w-full bg-muted text-foreground h-8 text-xs">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Text (General)</SelectItem>
-                    <SelectItem value="number">Number / Price</SelectItem>
-                    <SelectItem value="select">Dropdown (Options)</SelectItem>
-                    <SelectItem value="date">Date</SelectItem>
-                  </SelectContent>
-                </Select>
+                {isEditingDefault ? (
+                  <div className="h-8 flex items-center px-3 rounded-md bg-muted border border-border text-xs text-muted-foreground">
+                    <span className="capitalize">{fieldType}</span>
+                    <span className="ml-1 text-[10px] text-muted-foreground/70">(Default System Field)</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={fieldType}
+                    onValueChange={(val) => {
+                      if (val) setFieldType(val as CustomFieldType);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background border-border">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text" className="text-xs">
+                        Text
+                      </SelectItem>
+                      <SelectItem value="number" className="text-xs">
+                        Number
+                      </SelectItem>
+                      <SelectItem value="select" className="text-xs">
+                        Dropdown (Select)
+                      </SelectItem>
+                      <SelectItem value="date" className="text-xs">
+                        Date
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
-            {/* DROPDOWN OPTIONS BUILDER */}
-            {fieldType === 'select' && (
-              <div className="space-y-2 pt-1 border-t border-border/50">
-                <label className="text-[11px] font-medium text-muted-foreground block">
+            {/* DROPDOWN OPTIONS CONFIG (when fieldType === 'select' and custom) */}
+            {fieldType === 'select' && !isEditingDefault && (
+              <div className="space-y-2 pt-1 border-t border-border/60">
+                <label className="text-[11px] font-medium text-muted-foreground">
                   Dropdown Options
                 </label>
-                <div className="flex items-center gap-1.5">
+                <div className="flex gap-1.5">
                   <Input
                     value={newOptionInput}
                     onChange={(e) => setNewOptionInput(e.target.value)}
@@ -302,41 +430,40 @@ export function CustomColumnManager({
                         handleAddOption();
                       }
                     }}
-                    placeholder="Type an option & press Enter (e.g. House)"
-                    className="bg-muted text-foreground h-8 text-xs"
+                    placeholder="Type an option and press Add (e.g. Commercial)"
+                    className="h-8 text-xs bg-background border-border flex-1"
                   />
                   <Button
                     type="button"
                     size="sm"
+                    variant="outline"
                     onClick={handleAddOption}
-                    className="h-8 text-xs shrink-0"
+                    className="h-8 text-xs border-border shrink-0"
                   >
-                    <Plus className="size-3 mr-1" /> Add
+                    <Plus className="size-3.5 mr-1" />
+                    Add Option
                   </Button>
                 </div>
 
-                {options.length > 0 ? (
+                {options.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {options.map((opt, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-xs font-medium text-primary"
+                    {options.map((opt, i) => (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className="text-xs font-normal pl-2 pr-1 py-0.5 flex items-center gap-1"
                       >
                         {opt}
                         <button
                           type="button"
-                          onClick={() => handleRemoveOption(idx)}
-                          className="hover:text-red-400 focus:outline-none"
+                          onClick={() => handleRemoveOption(i)}
+                          className="hover:text-red-400 p-0.5 rounded-full"
                         >
                           <X className="size-3" />
                         </button>
-                      </span>
+                      </Badge>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground italic">
-                    No options added yet. Add at least one option above.
-                  </p>
                 )}
               </div>
             )}
@@ -353,47 +480,62 @@ export function CustomColumnManager({
                 ) : (
                   <Check className="size-3.5 mr-1" />
                 )}
-                {editingFieldId ? 'Save Changes' : 'Create Column'}
+                {editingColId ? 'Save Changes' : 'Create Column'}
               </Button>
             </div>
           </div>
 
-          {/* EXISTING COLUMNS LIST */}
+          {/* ACTIVE COLUMNS LIST */}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Existing Custom Columns ({fields.length})
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+              <span>Active Columns ({activeColumns.length})</span>
+              <span className="text-[10px] lowercase text-muted-foreground/70">default & custom</span>
             </h4>
 
             {loading ? (
               <div className="flex items-center justify-center p-6">
                 <Loader2 className="size-5 animate-spin text-primary" />
               </div>
-            ) : fields.length === 0 ? (
+            ) : activeColumns.length === 0 ? (
               <div className="rounded-lg border border-border p-6 text-center text-xs text-muted-foreground">
-                No custom columns created yet. Add one above or import a spreadsheet to auto-generate them!
+                No active columns found.
               </div>
             ) : (
               <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
-                {fields.map((f) => {
-                  const opts =
-                    (f.field_options as { options?: string[] })?.options || [];
+                {activeColumns.map((col) => {
+                  const isRenamed = col.isDefault && col.label !== col.defaultLabel;
                   return (
                     <div
-                      key={f.id}
+                      key={col.id}
                       className="flex items-center justify-between p-2.5 hover:bg-muted/30 transition-colors"
                     >
                       <div className="space-y-0.5 min-w-0 pr-2">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-xs text-foreground truncate">
-                            {f.field_name}
+                            {col.label}
                           </span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {f.field_type}
+                          {isRenamed && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              (Original: {col.defaultLabel})
+                            </span>
+                          )}
+                          <Badge
+                            variant={col.isDefault ? 'outline' : 'secondary'}
+                            className={`text-[10px] px-1.5 py-0 ${
+                              col.isDefault
+                                ? 'bg-muted/50 border-border text-muted-foreground'
+                                : 'bg-primary/10 text-primary border-primary/20'
+                            }`}
+                          >
+                            {col.isDefault ? 'Default' : 'Custom'}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground font-mono">
+                            {col.fieldType}
                           </Badge>
                         </div>
-                        {f.field_type === 'select' && opts.length > 0 && (
+                        {col.options && col.options.length > 0 && (
                           <p className="text-[11px] text-muted-foreground truncate">
-                            Options: {opts.join(', ')}
+                            Options: {col.options.join(', ')}
                           </p>
                         )}
                       </div>
@@ -402,21 +544,31 @@ export function CustomColumnManager({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleStartEdit(f)}
+                          onClick={() => handleStartEdit(col)}
                           className="size-7 p-0 text-muted-foreground hover:text-foreground"
-                          title="Edit column"
+                          title="Rename / Edit column"
                         >
                           <Pencil className="size-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteField(f)}
-                          disabled={deletingId === f.id}
-                          className="size-7 p-0 text-muted-foreground hover:text-red-400"
-                          title="Delete column"
+                          onClick={() => handleDeleteColumn(col)}
+                          disabled={deletingId === col.id || col.required}
+                          className={`size-7 p-0 ${
+                            col.required
+                              ? 'text-muted-foreground/30 cursor-not-allowed'
+                              : 'text-muted-foreground hover:text-red-400'
+                          }`}
+                          title={
+                            col.required
+                              ? 'Required core column'
+                              : col.isDefault
+                              ? 'Remove default column'
+                              : 'Delete custom column'
+                          }
                         >
-                          {deletingId === f.id ? (
+                          {deletingId === col.id ? (
                             <Loader2 className="size-3.5 animate-spin" />
                           ) : (
                             <Trash2 className="size-3.5" />
@@ -429,6 +581,43 @@ export function CustomColumnManager({
               </div>
             )}
           </div>
+
+          {/* REMOVED / HIDDEN DEFAULT COLUMNS (IF ANY) */}
+          {deletedColumns.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-border">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Removed Default Columns ({deletedColumns.length})
+              </h4>
+              <div className="rounded-lg border border-border divide-y divide-border overflow-hidden bg-muted/20">
+                {deletedColumns.map((col) => (
+                  <div
+                    key={col.id}
+                    className="flex items-center justify-between p-2.5 opacity-75 hover:opacity-100 transition-opacity"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground line-through">
+                        {col.label}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">
+                        Removed
+                      </Badge>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRestoreColumn(col)}
+                      disabled={deletingId === col.id}
+                      className="h-7 text-xs border-border text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="size-3 mr-1" />
+                      Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

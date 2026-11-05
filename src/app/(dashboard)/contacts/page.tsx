@@ -60,6 +60,12 @@ import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomColumnManager } from '@/components/common/custom-column-manager';
+import {
+  buildUnifiedContactColumns,
+  DEFAULT_CONTACT_COLUMNS_DEF,
+  type ColumnDefinition,
+} from '@/lib/columns/column-settings';
+import type { AccountColumnSetting } from '@/types';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { useTranslations } from 'next-intl';
@@ -143,39 +149,35 @@ export default function ContactsPage() {
     return columns.find((c) => c.id === id)?.visible ?? false;
   }
 
+  function getColLabel(id: string, fallback: string): string {
+    return columns.find((c) => c.id === id)?.label || fallback;
+  }
+
   const fetchCustomFields = useCallback(async () => {
     if (!accountId) return;
-    const { data, error } = await supabase
-      .from('custom_fields')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('entity_type', 'contact')
-      .order('field_name');
+    const [fieldsRes, settingsRes] = await Promise.all([
+      supabase
+        .from('custom_fields')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('entity_type', 'contact')
+        .order('field_name'),
+      supabase
+        .from('account_column_settings')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('entity_type', 'contact'),
+    ]);
 
-    if (!error && data) {
-      const fields = data as CustomField[];
-      setCustomFields(fields);
-      setColumns((prev) => {
-        const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
-        const customCols: ColumnConfig[] = fields.map((f) => ({
-          id: f.id,
-          label: f.field_name,
-          visible: prevVisibilityMap.has(f.id)
-            ? (prevVisibilityMap.get(f.id) as boolean)
-            : true,
-          isCustom: true,
-          fieldType: f.field_type,
-          options: (f.field_options as { options?: string[] } | null)?.options,
-        }));
-        const defaultCols = DEFAULT_CONTACT_COLUMNS.map((c) => ({
-          ...c,
-          visible: prevVisibilityMap.has(c.id)
-            ? (prevVisibilityMap.get(c.id) as boolean)
-            : c.visible,
-        }));
-        return [...defaultCols, ...customCols];
-      });
-    }
+    const fields = (fieldsRes.data as CustomField[]) || [];
+    const settings = (settingsRes.data as AccountColumnSetting[]) || [];
+    setCustomFields(fields);
+
+    setColumns((prev) => {
+      const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
+      const unified = buildUnifiedContactColumns(fields, settings, prevVisibilityMap);
+      return unified.filter((c) => !c.isDeleted);
+    });
   }, [accountId, supabase]);
 
   // Guards against out-of-order fetch responses: each fetchContacts run
@@ -688,22 +690,22 @@ export default function ContactsPage() {
                 />
               </TableHead>
               {isColVisible('name') && (
-                <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
+                <TableHead className="text-muted-foreground">{getColLabel('name', t('tableColumns.name'))}</TableHead>
               )}
               {isColVisible('phone') && (
-                <TableHead className="text-muted-foreground">{t('tableColumns.phone')}</TableHead>
+                <TableHead className="text-muted-foreground">{getColLabel('phone', t('tableColumns.phone'))}</TableHead>
               )}
               {isColVisible('email') && (
-                <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.email')}</TableHead>
+                <TableHead className="text-muted-foreground hidden md:table-cell">{getColLabel('email', t('tableColumns.email'))}</TableHead>
               )}
               {isColVisible('company') && (
-                <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.company')}</TableHead>
+                <TableHead className="text-muted-foreground hidden lg:table-cell">{getColLabel('company', t('tableColumns.company'))}</TableHead>
               )}
               {isColVisible('tags') && (
-                <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.tags')}</TableHead>
+                <TableHead className="text-muted-foreground hidden md:table-cell">{getColLabel('tags', t('tableColumns.tags'))}</TableHead>
               )}
               {isColVisible('created_at') && (
-                <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.createdAt')}</TableHead>
+                <TableHead className="text-muted-foreground hidden lg:table-cell">{getColLabel('created_at', t('tableColumns.createdAt'))}</TableHead>
               )}
               {columns
                 .filter((c) => c.isCustom && c.visible)

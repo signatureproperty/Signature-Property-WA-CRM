@@ -66,6 +66,11 @@ import { ListingForm } from '@/components/listings/listing-form';
 import { ListingDetailView } from '@/components/listings/listing-detail-view';
 import { ListingImportModal } from '@/components/listings/listing-import-modal';
 import { CustomColumnManager } from '@/components/common/custom-column-manager';
+import {
+  buildUnifiedListingColumns,
+  DEFAULT_LISTING_COLUMNS_DEF,
+} from '@/lib/columns/column-settings';
+import type { AccountColumnSetting } from '@/types';
 import { useTranslations } from 'next-intl';
 
 const STATUS_BADGES: Record<
@@ -152,7 +157,7 @@ export default function ListingsPage() {
     if (!account?.id) return;
     setLoading(true);
     try {
-      const [listingsRes, customFieldsRes] = await Promise.all([
+      const [listingsRes, customFieldsRes, settingsRes] = await Promise.all([
         supabase
           .from('property_listings')
           .select('*')
@@ -164,35 +169,24 @@ export default function ListingsPage() {
           .eq('account_id', account.id)
           .eq('entity_type', 'listing')
           .order('field_name'),
+        supabase
+          .from('account_column_settings')
+          .select('*')
+          .eq('account_id', account.id)
+          .eq('entity_type', 'listing'),
       ]);
 
       if (listingsRes.error) throw listingsRes.error;
       setListings((listingsRes.data as PropertyListing[]) || []);
 
-      if (customFieldsRes.data) {
-        const fields = customFieldsRes.data as CustomField[];
-        setColumns((prev) => {
-          const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
-          const customCols: ColumnConfig[] = fields.map((f) => ({
-            id: f.id,
-            label: f.field_name,
-            fieldName: f.field_name,
-            visible: prevVisibilityMap.has(f.id)
-              ? (prevVisibilityMap.get(f.id) as boolean)
-              : true,
-            isCustom: true,
-            fieldType: f.field_type,
-            options: (f.field_options as { options?: string[] } | null)?.options,
-          }));
-          const defaultCols = DEFAULT_COLUMNS.map((c) => ({
-            ...c,
-            visible: prevVisibilityMap.has(c.id)
-              ? (prevVisibilityMap.get(c.id) as boolean)
-              : c.visible,
-          }));
-          return [...defaultCols, ...customCols];
-        });
-      }
+      const fields = (customFieldsRes.data as CustomField[]) || [];
+      const settings = (settingsRes.data as AccountColumnSetting[]) || [];
+
+      setColumns((prev) => {
+        const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
+        const unified = buildUnifiedListingColumns(fields, settings, prevVisibilityMap);
+        return unified.filter((c) => !c.isDeleted);
+      });
     } catch (err: unknown) {
       console.error('Error fetching listings:', err);
       toast.error('Could not load property listings.');
@@ -322,6 +316,7 @@ export default function ListingsPage() {
   }
 
   const isColVisible = (colId: string) => columns.find((c) => c.id === colId)?.visible;
+  const getColLabel = (colId: string, fallback: string) => columns.find((c) => c.id === colId)?.label || fallback;
 
   return (
     <div className="space-y-6">
@@ -500,31 +495,31 @@ export default function ListingsPage() {
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
                   {isColVisible('serial_no') && (
-                    <TableHead className="w-20 text-xs text-muted-foreground">Sr No</TableHead>
+                    <TableHead className="w-20 text-xs text-muted-foreground">{getColLabel('serial_no', 'Sr No')}</TableHead>
                   )}
-                  {isColVisible('title') && <TableHead className="text-xs text-muted-foreground">Title & Details</TableHead>}
+                  {isColVisible('title') && <TableHead className="text-xs text-muted-foreground">{getColLabel('title', 'Title & Details')}</TableHead>}
                   {isColVisible('property_type') && (
-                    <TableHead className="text-xs text-muted-foreground">Type</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('property_type', 'Type')}</TableHead>
                   )}
-                  {isColVisible('size') && <TableHead className="text-xs text-muted-foreground">Size</TableHead>}
+                  {isColVisible('size') && <TableHead className="text-xs text-muted-foreground">{getColLabel('size', 'Size')}</TableHead>}
                   {isColVisible('demand_price') && (
-                    <TableHead className="text-xs text-muted-foreground">Demand</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('demand_price', 'Demand')}</TableHead>
                   )}
-                  {isColVisible('status') && <TableHead className="text-xs text-muted-foreground">Status</TableHead>}
+                  {isColVisible('status') && <TableHead className="text-xs text-muted-foreground">{getColLabel('status', 'Status')}</TableHead>}
                   {isColVisible('area_city') && (
-                    <TableHead className="text-xs text-muted-foreground">City & Area</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('area_city', 'City & Area')}</TableHead>
                   )}
                   {isColVisible('potential_rent') && (
-                    <TableHead className="text-xs text-muted-foreground">Potential Rent</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('potential_rent', 'Potential Rent')}</TableHead>
                   )}
                   {isColVisible('dimensions') && (
-                    <TableHead className="text-xs text-muted-foreground">Dimensions</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('dimensions', 'Dimensions')}</TableHead>
                   )}
                   {isColVisible('contact_number') && (
-                    <TableHead className="text-xs text-muted-foreground">Phone</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('contact_number', 'Phone')}</TableHead>
                   )}
                   {isColVisible('documents') && (
-                    <TableHead className="text-xs text-muted-foreground">Documents</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('documents', 'Documents')}</TableHead>
                   )}
                   {columns
                     .filter((c) => c.isCustom && c.visible)

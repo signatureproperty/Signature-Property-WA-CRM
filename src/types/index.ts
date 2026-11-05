@@ -140,6 +140,17 @@ export interface ContactTag {
   tag_id: string;
 }
 
+export interface AccountColumnSetting {
+  id?: string;
+  account_id: string;
+  entity_type: 'contact' | 'listing';
+  column_id: string;
+  label: string;
+  is_deleted: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type CustomFieldType = 'text' | 'number' | 'select' | 'date';
 
 export interface CustomField {

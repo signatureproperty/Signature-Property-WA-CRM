@@ -102,9 +102,10 @@ export function ListingForm({
   const [tags, setTags] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState('');
 
-  // Custom Fields (Dynamic Columns)
+  // Custom Fields (Dynamic Columns) & Column Settings
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [columnSettings, setColumnSettings] = useState<Record<string, { label: string; is_deleted: boolean }>>({});
 
   // Auto-generate title helper: "{Size} {Unit} {Type} in {Area}"
   function buildAutoTitle(sz: string, un: string, typ: string, ar: string) {
@@ -208,14 +209,29 @@ export function ListingForm({
 
   async function fetchCustomFields() {
     if (!account?.id) return;
-    const { data } = await supabase
-      .from('custom_fields')
-      .select('*')
-      .eq('account_id', account.id)
-      .eq('entity_type', 'listing')
-      .order('field_name');
+    const [fieldsRes, settingsRes] = await Promise.all([
+      supabase
+        .from('custom_fields')
+        .select('*')
+        .eq('account_id', account.id)
+        .eq('entity_type', 'listing')
+        .order('field_name'),
+      supabase
+        .from('account_column_settings')
+        .select('*')
+        .eq('account_id', account.id)
+        .eq('entity_type', 'listing'),
+    ]);
 
-    if (data) setCustomFields(data as CustomField[]);
+    if (fieldsRes.data) setCustomFields(fieldsRes.data as CustomField[]);
+
+    if (settingsRes.data) {
+      const sMap: Record<string, { label: string; is_deleted: boolean }> = {};
+      for (const s of settingsRes.data) {
+        sMap[s.column_id] = { label: s.label, is_deleted: s.is_deleted };
+      }
+      setColumnSettings(sMap);
+    }
 
     if (listing?.custom_fields) {
       setCustomValues(listing.custom_fields as Record<string, string>);
@@ -456,105 +472,121 @@ export function ListingForm({
 
           {/* 4. DEMAND & STATUS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Demand / Price
-              </Label>
-              <Input
-                placeholder="e.g. 2.2 Cr, 85 Lac"
-                value={demandPrice}
-                onChange={(e) => setDemandPrice(e.target.value)}
-                className="bg-muted border-border text-foreground font-semibold placeholder:text-muted-foreground"
-              />
-            </div>
+            {!columnSettings['demand_price']?.is_deleted && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground text-sm font-medium">
+                  {columnSettings['demand_price']?.label || 'Demand / Price'}
+                </Label>
+                <Input
+                  placeholder="e.g. 2.2 Cr, 85 Lac"
+                  value={demandPrice}
+                  onChange={(e) => setDemandPrice(e.target.value)}
+                  className="bg-muted border-border text-foreground font-semibold placeholder:text-muted-foreground"
+                />
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Listing Status
-              </Label>
-              <Select
-                value={status}
-                onValueChange={(val) => setStatus((val as PropertyListingStatus) || 'available')}
-              >
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!columnSettings['status']?.is_deleted && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground text-sm font-medium">
+                  {columnSettings['status']?.label || 'Listing Status'}
+                </Label>
+                <Select
+                  value={status}
+                  onValueChange={(val) => setStatus((val as PropertyListingStatus) || 'available')}
+                >
+                  <SelectTrigger className="w-full bg-muted border-border text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
-          {/* 5. CONTACT NUMBER & ADDRESS */}
+          {/* 5. CONTACT NUMBER & STOREY */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Contact / Seller Phone
-              </Label>
-              <Input
-                placeholder="e.g. 03278572797"
-                value={contactNumber}
-                onChange={(e) => setContactNumber(e.target.value)}
-                className="bg-muted border-border text-foreground font-mono text-sm placeholder:text-muted-foreground"
-              />
-            </div>
+            {!columnSettings['contact_number']?.is_deleted && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground text-sm font-medium">
+                  {columnSettings['contact_number']?.label || 'Contact / Seller Phone'}
+                </Label>
+                <Input
+                  placeholder="e.g. 03278572797"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                  className="bg-muted border-border text-foreground font-mono text-sm placeholder:text-muted-foreground"
+                />
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Storey / Floors
-              </Label>
-              <Input
-                placeholder="e.g. Single Storey, Double Storey"
-                value={storey}
-                onChange={(e) => setStorey(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
+            {!columnSettings['storey']?.is_deleted && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground text-sm font-medium">
+                  {columnSettings['storey']?.label || 'Storey / Floors'}
+                </Label>
+                <Input
+                  placeholder="e.g. Single Storey, Double Storey"
+                  value={storey}
+                  onChange={(e) => setStorey(e.target.value)}
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+            )}
           </div>
 
           {/* 6. DIMENSIONS & FINANCIALS (Front, Length, Potential Rent) */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Front
-              </Label>
-              <Input
-                placeholder="e.g. 30 ft"
-                value={frontDimension}
-                onChange={(e) => setFrontDimension(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-              />
-            </div>
+          {(!columnSettings['dimensions']?.is_deleted || !columnSettings['potential_rent']?.is_deleted) && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {!columnSettings['dimensions']?.is_deleted && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-sm font-medium">
+                      Front
+                    </Label>
+                    <Input
+                      placeholder="e.g. 30 ft"
+                      value={frontDimension}
+                      onChange={(e) => setFrontDimension(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Length
-              </Label>
-              <Input
-                placeholder="e.g. 55 ft"
-                value={lengthDimension}
-                onChange={(e) => setLengthDimension(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-sm font-medium">
+                      Length
+                    </Label>
+                    <Input
+                      placeholder="e.g. 55 ft"
+                      value={lengthDimension}
+                      onChange={(e) => setLengthDimension(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
+                    />
+                  </div>
+                </>
+              )}
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Potential Rent
-              </Label>
-              <Input
-                placeholder="e.g. 75,000/mo"
-                value={potentialRent}
-                onChange={(e) => setPotentialRent(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-              />
+              {!columnSettings['potential_rent']?.is_deleted && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-sm font-medium">
+                    {columnSettings['potential_rent']?.label || 'Potential Rent'}
+                  </Label>
+                  <Input
+                    placeholder="e.g. 75,000/mo"
+                    value={potentialRent}
+                    onChange={(e) => setPotentialRent(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
+                  />
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* 7. ADDRESS & LANDMARKS */}
           <div className="space-y-2">
@@ -571,31 +603,37 @@ export function ListingForm({
           </div>
 
           {/* 8. LEGAL DOCUMENTS & UTILITIES */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Documents / Ownership
-              </Label>
-              <Input
-                placeholder="e.g. Registry Inteqal, Fard"
-                value={documents}
-                onChange={(e) => setDocuments(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
+          {(!columnSettings['documents']?.is_deleted || !columnSettings['utilities']?.is_deleted) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {!columnSettings['documents']?.is_deleted && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-sm font-medium">
+                    {columnSettings['documents']?.label || 'Documents / Ownership'}
+                  </Label>
+                  <Input
+                    placeholder="e.g. Registry Inteqal, Fard"
+                    value={documents}
+                    onChange={(e) => setDocuments(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+              )}
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Utilities Available
-              </Label>
-              <Input
-                placeholder="e.g. Electricity, Gas, Water"
-                value={utilities}
-                onChange={(e) => setUtilities(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
+              {!columnSettings['utilities']?.is_deleted && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-sm font-medium">
+                    {columnSettings['utilities']?.label || 'Utilities Available'}
+                  </Label>
+                  <Input
+                    placeholder="e.g. Electricity, Gas, Water"
+                    value={utilities}
+                    onChange={(e) => setUtilities(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* 9. TAGS */}
           <div className="space-y-2">

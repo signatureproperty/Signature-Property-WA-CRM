@@ -16,3 +16,4 @@ CREATE POLICY custom_fields_update ON custom_fields FOR UPDATE USING (is_account
 
 DROP POLICY IF EXISTS custom_fields_delete ON custom_fields;
 CREATE POLICY custom_fields_delete ON custom_fields FOR DELETE USING (is_account_member(account_id));
+

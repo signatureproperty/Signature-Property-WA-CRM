@@ -78,9 +78,10 @@ export function ContactForm({
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
 
-  // Custom Fields
+  // Custom Fields & Column Overrides
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [columnSettings, setColumnSettings] = useState<Record<string, { label: string; is_deleted: boolean }>>({});
   const [newTagName, setNewTagName] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
 
@@ -133,14 +134,29 @@ export function ContactForm({
 
   async function fetchCustomFields() {
     if (!accountId) return;
-    const { data: fieldsData } = await supabase
-      .from('custom_fields')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('entity_type', 'contact')
-      .order('field_name');
+    const [fieldsRes, settingsRes] = await Promise.all([
+      supabase
+        .from('custom_fields')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('entity_type', 'contact')
+        .order('field_name'),
+      supabase
+        .from('account_column_settings')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('entity_type', 'contact'),
+    ]);
 
-    if (fieldsData) setCustomFields(fieldsData as CustomField[]);
+    if (fieldsRes.data) setCustomFields(fieldsRes.data as CustomField[]);
+
+    if (settingsRes.data) {
+      const sMap: Record<string, { label: string; is_deleted: boolean }> = {};
+      for (const s of settingsRes.data) {
+        sMap[s.column_id] = { label: s.label, is_deleted: s.is_deleted };
+      }
+      setColumnSettings(sMap);
+    }
 
     if (contact?.id) {
       const { data: valData } = await supabase
@@ -344,7 +360,7 @@ export function ContactForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cf-name" className="text-muted-foreground">
-              {t('nameLabel')}
+              {columnSettings['name']?.label || t('nameLabel')}
             </Label>
             <Input
               id="cf-name"
@@ -357,7 +373,8 @@ export function ContactForm({
 
           <div className="space-y-2">
             <Label htmlFor="cf-phone" className="text-muted-foreground">
-              {t('phoneLabel')} <span className="text-red-400">*</span>
+              {columnSettings['phone']?.label || t('phoneLabel')}{' '}
+              <span className="text-red-400">*</span>
             </Label>
             <Input
               id="cf-phone"
@@ -403,75 +420,82 @@ export function ContactForm({
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cf-email" className="text-muted-foreground">
-              {t('emailLabel')}
-            </Label>
-            <Input
-              id="cf-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t('emailPlaceholder')}
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cf-company" className="text-muted-foreground">
-              {t('companyLabel')}
-            </Label>
-            <Input
-              id="cf-company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder={t('companyPlaceholder')}
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">{t('tagsLabel')}</Label>
-            
-            {/* Inline Quick Tag Creator */}
-            <div className="flex items-center gap-2">
+          {!columnSettings['email']?.is_deleted && (
+            <div className="space-y-2">
+              <Label htmlFor="cf-email" className="text-muted-foreground">
+                {columnSettings['email']?.label || t('emailLabel')}
+              </Label>
               <Input
-                placeholder="New tag name (e.g. Urgent Buyer, DHA)..."
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleCreateTag();
-                  }
-                }}
-                className="bg-muted border-border text-xs h-8 flex-1"
+                id="cf-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('emailPlaceholder')}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCreateTag}
-                disabled={creatingTag || !newTagName.trim()}
-                className="h-8 text-xs shrink-0"
-              >
-                {creatingTag ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3 mr-1" />}
-                Add Tag
-              </Button>
             </div>
+          )}
 
-            {loadingTags ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="size-3 animate-spin" />
-                {t('loadingTags')}
+          {!columnSettings['company']?.is_deleted && (
+            <div className="space-y-2">
+              <Label htmlFor="cf-company" className="text-muted-foreground">
+                {columnSettings['company']?.label || t('companyLabel')}
+              </Label>
+              <Input
+                id="cf-company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder={t('companyPlaceholder')}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+          )}
+
+          {!columnSettings['tags']?.is_deleted && (
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">
+                {columnSettings['tags']?.label || t('tagsLabel')}
+              </Label>
+              
+              {/* Inline Quick Tag Creator */}
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="New tag name (e.g. Urgent Buyer, DHA)..."
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCreateTag();
+                    }
+                  }}
+                  className="bg-muted border-border text-xs h-8 flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCreateTag}
+                  disabled={creatingTag || !newTagName.trim()}
+                  className="h-8 text-xs shrink-0"
+                >
+                  {creatingTag ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3 mr-1" />}
+                  Add Tag
+                </Button>
               </div>
-            ) : tags.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {t('noTagsAvailable')}
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {tags.map((tag) => {
+
+              {loadingTags ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="size-3 animate-spin" />
+                  {t('loadingTags')}
+                </div>
+              ) : tags.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t('noTagsAvailable')}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => {
                   const selected = selectedTagIds.includes(tag.id);
                   return (
                     <button
@@ -496,6 +520,7 @@ export function ContactForm({
               </div>
             )}
           </div>
+          )}
 
           {/* DYNAMIC CUSTOM FIELDS */}
           {customFields.length > 0 && (
