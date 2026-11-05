@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { toast } from 'sonner';
-import type { Contact, Tag, ContactTag } from '@/types';
+import type { Contact, Tag, ContactTag, CustomField } from '@/types';
 import {
   findExistingContact,
   isExactMatch,
@@ -25,6 +25,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, AlertTriangle, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -70,6 +77,10 @@ export function ContactForm({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+
+  // Custom Fields
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [newTagName, setNewTagName] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
 
@@ -116,8 +127,38 @@ export function ContactForm({
       setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
       setDupMatch(null);
       fetchTags();
+      fetchCustomFields();
     }
-  }, [open, contact]);
+  }, [open, contact, accountId]);
+
+  async function fetchCustomFields() {
+    if (!accountId) return;
+    const { data: fieldsData } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('entity_type', 'contact')
+      .order('field_name');
+
+    if (fieldsData) setCustomFields(fieldsData as CustomField[]);
+
+    if (contact?.id) {
+      const { data: valData } = await supabase
+        .from('contact_custom_values')
+        .select('*')
+        .eq('contact_id', contact.id);
+
+      if (valData) {
+        const map: Record<string, string> = {};
+        for (const v of valData) {
+          map[v.custom_field_id] = v.value ?? '';
+        }
+        setCustomValues(map);
+      }
+    } else {
+      setCustomValues({});
+    }
+  }
 
   // Look up an existing contact with this number (new contacts only).
   // Runs on blur so we don't query on every keystroke.
@@ -239,6 +280,23 @@ export function ContactForm({
         }
         for (const tagId of toAdd) {
           await addContactTag(contactId, tagId);
+        }
+
+        // Sync custom values
+        if (Object.keys(customValues).length > 0) {
+          const customUpserts = Object.entries(customValues)
+            .filter(([_, val]) => val !== undefined && val !== '')
+            .map(([fId, val]) => ({
+              contact_id: contactId,
+              custom_field_id: fId,
+              value: val,
+            }));
+
+          if (customUpserts.length > 0) {
+            await supabase.from('contact_custom_values').upsert(customUpserts, {
+              onConflict: 'contact_id,custom_field_id',
+            });
+          }
         }
       }
 
@@ -438,6 +496,88 @@ export function ContactForm({
               </div>
             )}
           </div>
+
+          {/* DYNAMIC CUSTOM FIELDS */}
+          {customFields.length > 0 && (
+            <div className="space-y-3 pt-3 border-t border-border">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Custom Fields ({customFields.length})
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {customFields.map((field) => {
+                  const val = customValues[field.id] || '';
+                  const opts =
+                    (field.field_options as { options?: string[] })?.options || [];
+                  return (
+                    <div key={field.id} className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        {field.field_name}
+                      </Label>
+                      {field.field_type === 'select' ? (
+                        <Select
+                          value={val || undefined}
+                          onValueChange={(v) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.id]: v ?? '',
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-full bg-muted border-border text-foreground text-xs h-9">
+                            <SelectValue placeholder={`Select ${field.field_name}`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {opts.map((opt) => (
+                              <SelectItem key={opt} value={opt} className="text-xs">
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : field.field_type === 'number' ? (
+                        <Input
+                          type="number"
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.id]: e.target.value,
+                            }))
+                          }
+                          placeholder={field.field_name}
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      ) : field.field_type === 'date' ? (
+                        <Input
+                          type="date"
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.id]: e.target.value,
+                            }))
+                          }
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      ) : (
+                        <Input
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.id]: e.target.value,
+                            }))
+                          }
+                          placeholder={field.field_name}
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="bg-popover border-border">
             <Button

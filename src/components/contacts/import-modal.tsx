@@ -11,6 +11,7 @@ import {
 import {
   parseContactCsv,
   type ParsedContactRow,
+  type DiscoveredCustomColumn,
 } from '@/lib/contacts/parse-contact-csv';
 import {
   assignImportedContactTags,
@@ -133,6 +134,7 @@ export function ImportModal({
 
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedContactRow[]>([]);
+  const [discoveredColumns, setDiscoveredColumns] = useState<DiscoveredCustomColumn[]>([]);
   const [hasTagsColumn, setHasTagsColumn] = useState(false);
   const [hasCompanyColumn, setHasCompanyColumn] = useState(false);
   const [tagColorByKey, setTagColorByKey] = useState<Map<string, string>>(
@@ -151,6 +153,7 @@ export function ImportModal({
   function reset() {
     setFile(null);
     setParsedRows([]);
+    setDiscoveredColumns([]);
     setHasTagsColumn(false);
     setHasCompanyColumn(false);
     setTagColorByKey(new Map());
@@ -175,11 +178,13 @@ export function ImportModal({
       rows,
       hasTagsColumn: csvHasTags,
       hasCompanyColumn: csvHasCompany,
+      discoveredCustomColumns: discoveredCols,
     } = parseContactCsv(text);
 
     if (rows.length === 0) {
       toast.error(t('toastNoValidRows'));
       setParsedRows([]);
+      setDiscoveredColumns([]);
       setHasTagsColumn(false);
       setHasCompanyColumn(false);
       setTagColorByKey(new Map());
@@ -187,6 +192,7 @@ export function ImportModal({
     }
 
     setParsedRows(rows);
+    setDiscoveredColumns(discoveredCols);
     setHasTagsColumn(csvHasTags);
     setHasCompanyColumn(csvHasCompany);
 
@@ -275,6 +281,55 @@ export function ImportModal({
 
       const tagAssignments: ContactTagAssignment[] = [];
       const noteInserts: { contact_id: string; user_id: string; note_text: string }[] = [];
+      const customValueInserts: { contact_id: string; custom_field_id: string; value: string }[] = [];
+
+      // 3b) Auto-create or resolve custom fields for any discovered columns
+      const fieldIdByName = new Map<string, string>();
+      if (discoveredColumns.length > 0 && accountId) {
+        const { data: existingFields } = await supabase
+          .from('custom_fields')
+          .select('id, field_name')
+          .eq('account_id', accountId)
+          .eq('entity_type', 'contact');
+
+        for (const f of existingFields ?? []) {
+          fieldIdByName.set(f.field_name.toLowerCase(), f.id);
+        }
+
+        for (const col of discoveredColumns) {
+          const key = col.name.toLowerCase();
+          if (!fieldIdByName.has(key)) {
+            const nonEmpties = col.sampleValues.filter(Boolean);
+            const uniqueVals = Array.from(new Set(nonEmpties));
+            let fType = 'text';
+            let fOpts: Record<string, unknown> = {};
+
+            if (uniqueVals.length > 0 && uniqueVals.length <= 6 && nonEmpties.length >= 2) {
+              fType = 'select';
+              fOpts = { options: uniqueVals };
+            } else if (nonEmpties.length > 0 && nonEmpties.every((v) => !isNaN(Number(v.replace(/[,%$]/g, ''))))) {
+              fType = 'number';
+            }
+
+            const { data: newField, error: newFieldErr } = await supabase
+              .from('custom_fields')
+              .insert({
+                account_id: accountId,
+                user_id: user.id,
+                entity_type: 'contact',
+                field_name: col.name,
+                field_type: fType,
+                field_options: fOpts,
+              })
+              .select('id')
+              .single();
+
+            if (!newFieldErr && newField) {
+              fieldIdByName.set(key, newField.id);
+            }
+          }
+        }
+      }
 
       // 4) Batch insert the genuinely-new rows in chunks of 50. The DB
       //    unique index is the backstop: a 23505 (race, or a format
@@ -324,6 +379,18 @@ export function ImportModal({
                   note_text: source.notes,
                 });
               }
+              if (source.customFieldValues) {
+                for (const [colName, val] of Object.entries(source.customFieldValues)) {
+                  const fId = fieldIdByName.get(colName.toLowerCase());
+                  if (fId && val) {
+                    customValueInserts.push({
+                      contact_id: singleData.id,
+                      custom_field_id: fId,
+                      value: val,
+                    });
+                  }
+                }
+              }
             } else if (isUniqueViolation(singleErr)) {
               skipped++;
             } else {
@@ -361,6 +428,18 @@ export function ImportModal({
                 note_text: source.notes,
               });
             }
+            if (source.customFieldValues) {
+              for (const [colName, val] of Object.entries(source.customFieldValues)) {
+                const fId = fieldIdByName.get(colName.toLowerCase());
+                if (fId && val) {
+                  customValueInserts.push({
+                    contact_id: inserted[j].id,
+                    custom_field_id: fId,
+                    value: val,
+                  });
+                }
+              }
+            }
           }
         }
       }
@@ -383,6 +462,21 @@ export function ImportModal({
           await supabase.from('contact_notes').insert(noteInserts);
         } catch (err) {
           console.error('[contacts import] failed to save contact notes:', err);
+        }
+      }
+
+      // 7) Save custom column values if present
+      if (customValueInserts.length > 0) {
+        try {
+          const chunkSizeVal = 100;
+          for (let c = 0; c < customValueInserts.length; c += chunkSizeVal) {
+            await supabase.from('contact_custom_values').upsert(
+              customValueInserts.slice(c, c + chunkSizeVal),
+              { onConflict: 'contact_id,custom_field_id' }
+            );
+          }
+        } catch (err) {
+          console.error('[contacts import] failed to save custom values:', err);
         }
       }
 

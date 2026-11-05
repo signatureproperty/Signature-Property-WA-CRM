@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { parseListingCsv, type ParsedListingRow } from '@/lib/listings/parse-listing-csv';
+import type { DiscoveredCustomColumn } from '@/lib/contacts/parse-contact-csv';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -43,6 +44,7 @@ export function ListingImportModal({
 
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedListingRow[]>([]);
+  const [discoveredColumns, setDiscoveredColumns] = useState<DiscoveredCustomColumn[]>([]);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{
     imported: number;
@@ -52,6 +54,7 @@ export function ListingImportModal({
   function reset() {
     setFile(null);
     setParsedRows([]);
+    setDiscoveredColumns([]);
     setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -69,15 +72,17 @@ export function ListingImportModal({
     setResult(null);
 
     const text = await selected.text();
-    const { rows, hasRecognizedColumns } = parseListingCsv(text, existingCount);
+    const { rows, hasRecognizedColumns, discoveredCustomColumns } = parseListingCsv(text, existingCount);
 
     if (!hasRecognizedColumns || rows.length === 0) {
       toast.error(t('toastNoValidRows'));
       setParsedRows([]);
+      setDiscoveredColumns([]);
       return;
     }
 
     setParsedRows(rows);
+    setDiscoveredColumns(discoveredCustomColumns);
   }
 
   async function handleImport() {
@@ -91,6 +96,45 @@ export function ListingImportModal({
       const user = session?.user;
       if (!user) throw new Error('Not authenticated');
       if (!accountId) throw new Error('Not linked to an account');
+
+      // Auto-create any discovered custom fields for listings
+      if (discoveredColumns.length > 0) {
+        const { data: existingFields } = await supabase
+          .from('custom_fields')
+          .select('field_name')
+          .eq('account_id', accountId)
+          .eq('entity_type', 'listing');
+
+        const existingNames = new Set(
+          (existingFields ?? []).map((f) => f.field_name.toLowerCase())
+        );
+
+        for (const col of discoveredColumns) {
+          if (!existingNames.has(col.name.toLowerCase())) {
+            const nonEmpties = col.sampleValues.filter(Boolean);
+            const uniqueVals = Array.from(new Set(nonEmpties));
+            let fType = 'text';
+            let fOpts: Record<string, unknown> = {};
+
+            if (uniqueVals.length > 0 && uniqueVals.length <= 6 && nonEmpties.length >= 2) {
+              fType = 'select';
+              fOpts = { options: uniqueVals };
+            } else if (nonEmpties.length > 0 && nonEmpties.every((v) => !isNaN(Number(v.replace(/[,%$]/g, ''))))) {
+              fType = 'number';
+            }
+
+            await supabase.from('custom_fields').insert({
+              account_id: accountId,
+              user_id: user.id,
+              entity_type: 'listing',
+              field_name: col.name,
+              field_type: fType,
+              field_options: fOpts,
+            });
+            existingNames.add(col.name.toLowerCase());
+          }
+        }
+      }
 
       let imported = 0;
       let failed = 0;
@@ -119,6 +163,7 @@ export function ListingImportModal({
           status: r.status,
           description: r.description || null,
           tags: r.tags || [],
+          custom_fields: r.customFieldValues || {},
         }));
 
         const { data, error } = await supabase

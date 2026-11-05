@@ -1,5 +1,4 @@
-import { parseCsvLine } from '@/lib/contacts/parse-contact-csv';
-import { normalizePhoneForImport } from '@/lib/contacts/parse-contact-csv';
+import { parseCsvLine, normalizePhoneForImport, type DiscoveredCustomColumn } from '@/lib/contacts/parse-contact-csv';
 
 export interface ParsedListingRow {
   serial_no?: string;
@@ -20,11 +19,14 @@ export interface ParsedListingRow {
   status: 'available' | 'sold';
   description?: string;
   tags: string[];
+  /** Dynamic unmapped custom fields (e.g. { 'Commission': '1%', 'Plot No': '142' }) */
+  customFieldValues?: Record<string, string>;
 }
 
 export interface ParseListingCsvResult {
   rows: ParsedListingRow[];
   hasRecognizedColumns: boolean;
+  discoveredCustomColumns: DiscoveredCustomColumn[];
 }
 
 function normalizeHeaderName(name: string): string {
@@ -47,11 +49,12 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     return {
       rows: [],
       hasRecognizedColumns: false,
+      discoveredCustomColumns: [],
     };
   }
 
   const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
-  const rawHeaders = parseCsvLine(lines[0], delimiter);
+  const rawHeaders = parseCsvLine(lines[0], delimiter).map((h) => h.replace(/["']/g, '').trim());
   const headers = rawHeaders.map(normalizeHeaderName);
 
   const serialIdx = findHeaderIndex(headers, ['sr no', 'sr. no', 'sr_no', 'serial', 'reference', 'ref', 'p no', 'id']);
@@ -89,7 +92,29 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     return {
       rows: [],
       hasRecognizedColumns: false,
+      discoveredCustomColumns: [],
     };
+  }
+
+  // Any column not mapped to core table columns is a custom column
+  const baseIndices = new Set(
+    [
+      serialIdx, dateIdx, numberIdx, cityIdx, areaIdx, addressIdx,
+      typeIdx, sizeIdx, storeyIdx, utilitiesIdx, statusIdx, rentIdx,
+      frontIdx, lengthIdx, demandIdx, docsIdx, titleIdx, descIdx, tagsIdx
+    ].filter((idx) => idx >= 0)
+  );
+
+  const customColumnIndices: number[] = [];
+  for (let idx = 0; idx < rawHeaders.length; idx++) {
+    if (!baseIndices.has(idx) && rawHeaders[idx]) {
+      customColumnIndices.push(idx);
+    }
+  }
+
+  const customColSamples: Record<string, string[]> = {};
+  for (const cIdx of customColumnIndices) {
+    customColSamples[rawHeaders[cIdx]] = [];
   }
 
   const rows: ParsedListingRow[] = [];
@@ -160,6 +185,19 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     if (customDesc) descParts.push(customDesc);
     const description = descParts.length > 0 ? descParts.join('\n') : undefined;
 
+    // Collect custom columns
+    const customValues: Record<string, string> = {};
+    for (const cIdx of customColumnIndices) {
+      const colName = rawHeaders[cIdx];
+      const val = values[cIdx]?.replace(/["']/g, '').trim() ?? '';
+      if (val) {
+        customValues[colName] = val;
+        if (customColSamples[colName].length < 10) {
+          customColSamples[colName].push(val);
+        }
+      }
+    }
+
     rows.push({
       serial_no,
       title,
@@ -179,12 +217,18 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
       status,
       description,
       tags: rowTags,
+      customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,
     });
   }
+
+  const discoveredCustomColumns: DiscoveredCustomColumn[] = customColumnIndices.map((cIdx) => ({
+    name: rawHeaders[cIdx],
+    sampleValues: customColSamples[rawHeaders[cIdx]] || [],
+  }));
 
   return {
     rows,
     hasRecognizedColumns: true,
+    discoveredCustomColumns,
   };
 }
-

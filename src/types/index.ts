@@ -140,14 +140,17 @@ export interface ContactTag {
   tag_id: string;
 }
 
+export type CustomFieldType = 'text' | 'number' | 'select' | 'date';
+
 export interface CustomField {
   id: string;
   user_id: string;
   /** Tenancy key — NOT NULL since migration 017. */
   account_id: string;
+  entity_type?: 'contact' | 'listing';
   field_name: string;
-  field_type: string;
-  field_options?: Record<string, unknown>;
+  field_type: CustomFieldType | string;
+  field_options?: { options?: string[] } | Record<string, unknown>;
   created_at: string;
 }
 

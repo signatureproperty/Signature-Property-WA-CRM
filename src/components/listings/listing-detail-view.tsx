@@ -272,6 +272,23 @@ export function ListingDetailView({
             </div>
           )}
 
+          {/* CUSTOM FIELDS / EXTRA SPECS */}
+          {listing.custom_fields && Object.keys(listing.custom_fields).length > 0 && (
+            <div className="space-y-2 rounded-lg border border-border/80 p-3.5 bg-muted/10">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Custom Fields
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {Object.entries(listing.custom_fields).map(([key, val]) => (
+                  <div key={key} className="flex justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">{key}</span>
+                    <span className="font-medium text-foreground">{val || '-'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* DESCRIPTION / NOTES */}
           {listing.description && (
             <div className="space-y-1.5 p-3 rounded-lg border border-border bg-muted/20">

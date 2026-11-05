@@ -15,16 +15,23 @@
 * **Statuses:** Simplified to `Available` and `Sold`.
 * **Units Supported:** `Marla`, `Kanal`, `Sq. Ft.`, `Acre`, `Maraba`.
 * **1-Click WhatsApp Sharing:** Generates formatted WhatsApp text summary with key details.
+* **Google Sheet-Style Dynamic Custom Columns:**
+  * Both Contacts and Listings feature dynamic spreadsheet-style custom columns (`text`, `number`, `select` dropdown with custom options, and `date`).
+  * Custom Column Manager (`CustomColumnManager`) allows creating, renaming, re-typing, configuring dropdown options, and deleting columns.
+  * Columns visibility dropdown ("Columns") allows users to show/hide default and custom columns.
+  * Forms (`ContactForm`, `ListingForm`) dynamically render all custom columns.
+  * Detail views (`ContactDetailView`, `ListingDetailView`) allow inspecting and updating all custom columns.
+* **Auto-Creation of Columns on Import:**
+  * When importing a Google Sheet / CSV into Contacts or Listings, any extra headers (e.g. `City, Area, Property Type, Size, Budget, Investor, Notes` or custom listing columns) are automatically registered in the database as custom fields with inferred types (`select`, `number`, `text`) and populated for every row.
 * **Real Estate Contacts Import:**
   * Supports real estate Google Sheet format (`Date, Number, Name, City, Area, Property Type, Size, Budget, Investor, Notes`).
   * Column aliases for phone: `number`, `phone number`, `mobile`, `contact`, `cell`, `whatsapp`.
   * Auto-normalizes Pakistani phone numbers (`03xx...`, `3xx...`, `923xx...` -> `+923xx...`).
-  * Auto-creates filterable tags from `City`, `Area`, `Property Type`, `Investor`.
-  * Saves customer preferences (Budget, Area, Size, Date, Notes) directly into `contact_notes`.
+  * Auto-creates filterable tags and auto-creates missing custom columns.
 * **Property Listings CSV Import:**
   * Dedicated modal on `/listings` with "Import" button.
   * Direct ingestion of user's Google Sheet columns: `Sr No`, `Date`, `Number`, `City`, `Area`, `Address`, `Property Type`, `Size`, `Storey`, `Utilities`, `Status`, `Potential Rent`, `Front`, `Length`, `Demand`, `Documents`.
-  * Previews first 5 rows before importing. Auto-generates reference numbers (`L-1`, `L-2`) and titles if missing.
+  * Auto-detects custom columns and saves them into `property_listings.custom_fields`.
 
 ### UI & Dark Mode Consistency Lessons
 * **Container Backgrounds:** Table containers must be `<div className="rounded-lg border border-border overflow-hidden">` WITHOUT `bg-card`. In dark mode, `bg-card` adds an elevated grey surface that clashes with the pure dark background.
@@ -38,4 +45,4 @@
 * **Framework:** Next.js 16 (Turbopack, App Router).
 * **Backend:** Supabase PostgreSQL 17 with Row-Level Security (RLS) on all tables.
 * **Active Remote Supabase Project:** `ruvijtkppnhhasunzoxy` (Signature Property WA CRM).
-* **Migrations Applied:** 001 through 061 (including `060_property_listings.sql` and `061_redeem_invitation_property_listings.sql` live).
+* **Migrations Applied:** 001 through 062 (including `060_property_listings.sql`, `061_redeem_invitation_property_listings.sql`, and `062_custom_fields_enhancements.sql` live).

@@ -27,6 +27,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Phone,
   Mail,
   Building2,
@@ -153,7 +160,11 @@ export function ContactDetailView({
     setLoadingCustom(true);
 
     const [fieldsRes, valuesRes] = await Promise.all([
-      supabase.from('custom_fields').select('*').order('field_name'),
+      supabase
+        .from('custom_fields')
+        .select('*')
+        .eq('entity_type', 'contact')
+        .order('field_name'),
       supabase
         .from('contact_custom_values')
         .select('*')
@@ -666,24 +677,77 @@ export function ContactDetailView({
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {customFields.map((field) => (
-                      <div key={field.id} className="space-y-1.5">
-                        <Label className="text-muted-foreground text-xs capitalize">
-                          {field.field_name}
-                        </Label>
-                        <Input
-                          value={customValues[field.id] ?? ''}
-                          onChange={(e) =>
-                            setCustomValues((prev) => ({
-                              ...prev,
-                              [field.id]: e.target.value,
-                            }))
-                          }
-                          placeholder={t('enterCustomField', { name: field.field_name })}
-                          className="bg-muted border-border text-foreground h-8 text-sm placeholder:text-muted-foreground"
-                        />
-                      </div>
-                    ))}
+                    {customFields.map((field) => {
+                      const val = customValues[field.id] ?? '';
+                      const rawOpts = (field.field_options as { options?: string[] } | null)?.options;
+                      const opts: string[] = Array.isArray(rawOpts) ? rawOpts : [];
+                      return (
+                        <div key={field.id} className="space-y-1.5">
+                          <Label className="text-muted-foreground text-xs capitalize">
+                            {field.field_name}
+                          </Label>
+                          {field.field_type === 'select' && opts.length > 0 ? (
+                            <Select
+                              value={val}
+                              onValueChange={(selectedVal) =>
+                                setCustomValues((prev) => ({
+                                  ...prev,
+                                  [field.id]: selectedVal ?? '',
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="bg-muted border-border text-foreground h-8 text-sm w-full">
+                                <SelectValue placeholder={t('enterCustomField', { name: field.field_name })} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {opts.map((opt: string) => (
+                                  <SelectItem key={opt} value={opt} className="text-xs">
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : field.field_type === 'number' ? (
+                            <Input
+                              type="number"
+                              value={val}
+                              onChange={(e) =>
+                                setCustomValues((prev) => ({
+                                  ...prev,
+                                  [field.id]: e.target.value,
+                                }))
+                              }
+                              placeholder={t('enterCustomField', { name: field.field_name })}
+                              className="bg-muted border-border text-foreground h-8 text-sm placeholder:text-muted-foreground"
+                            />
+                          ) : field.field_type === 'date' ? (
+                            <Input
+                              type="date"
+                              value={val}
+                              onChange={(e) =>
+                                setCustomValues((prev) => ({
+                                  ...prev,
+                                  [field.id]: e.target.value,
+                                }))
+                              }
+                              className="bg-muted border-border text-foreground h-8 text-sm"
+                            />
+                          ) : (
+                            <Input
+                              value={val}
+                              onChange={(e) =>
+                                setCustomValues((prev) => ({
+                                  ...prev,
+                                  [field.id]: e.target.value,
+                                }))
+                              }
+                              placeholder={t('enterCustomField', { name: field.field_name })}
+                              className="bg-muted border-border text-foreground h-8 text-sm placeholder:text-muted-foreground"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                     <Button
                       onClick={saveCustomFields}
                       disabled={savingCustom}

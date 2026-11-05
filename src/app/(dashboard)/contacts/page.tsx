@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import type { Contact, Tag, ContactTag } from '@/types';
+import type { Contact, Tag, ContactTag, CustomField } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -19,8 +21,11 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import {
   Dialog,
@@ -47,13 +52,14 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  Columns3,
   Filter,
   X,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
-import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
+import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { useTranslations } from 'next-intl';
@@ -69,10 +75,29 @@ interface ContactWithTags extends Contact {
   tags?: Tag[];
 }
 
+interface ColumnConfig {
+  id: string;
+  label: string;
+  visible: boolean;
+  isCustom?: boolean;
+  fieldType?: string;
+  options?: string[];
+}
+
+const DEFAULT_CONTACT_COLUMNS: ColumnConfig[] = [
+  { id: 'name', label: 'Name', visible: true },
+  { id: 'phone', label: 'Phone', visible: true },
+  { id: 'email', label: 'Email', visible: true },
+  { id: 'company', label: 'Company', visible: true },
+  { id: 'tags', label: 'Tags', visible: true },
+  { id: 'created_at', label: 'Created', visible: true },
+];
+
 export default function ContactsPage() {
   const t = useTranslations('Contacts.page');
   const tGate = useTranslations('GatedButton');
   const supabase = createClient();
+  const { accountId } = useAuth();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
 
@@ -83,6 +108,11 @@ export default function ContactsPage() {
   const [totalCount, setTotalCount] = useState(0);
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  // Columns & Custom Fields
+  const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_CONTACT_COLUMNS);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customValuesMap, setCustomValuesMap] = useState<Record<string, Record<string, string>>>({});
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -102,6 +132,51 @@ export default function ContactsPage() {
 
   // All tags for display
   const [tagsMap, setTagsMap] = useState<Record<string, Tag>>({});
+
+  function toggleColumn(colId: string) {
+    setColumns((prev) =>
+      prev.map((c) => (c.id === colId ? { ...c, visible: !c.visible } : c))
+    );
+  }
+
+  function isColVisible(id: string): boolean {
+    return columns.find((c) => c.id === id)?.visible ?? false;
+  }
+
+  const fetchCustomFields = useCallback(async () => {
+    if (!accountId) return;
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('entity_type', 'contact')
+      .order('field_name');
+
+    if (!error && data) {
+      const fields = data as CustomField[];
+      setCustomFields(fields);
+      setColumns((prev) => {
+        const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
+        const customCols: ColumnConfig[] = fields.map((f) => ({
+          id: f.id,
+          label: f.field_name,
+          visible: prevVisibilityMap.has(f.id)
+            ? (prevVisibilityMap.get(f.id) as boolean)
+            : true,
+          isCustom: true,
+          fieldType: f.field_type,
+          options: (f.field_options as { options?: string[] } | null)?.options,
+        }));
+        const defaultCols = DEFAULT_CONTACT_COLUMNS.map((c) => ({
+          ...c,
+          visible: prevVisibilityMap.has(c.id)
+            ? (prevVisibilityMap.get(c.id) as boolean)
+            : c.visible,
+        }));
+        return [...defaultCols, ...customCols];
+      });
+    }
+  }, [accountId, supabase]);
 
   // Guards against out-of-order fetch responses: each fetchContacts run
   // claims a sequence number and only the latest is allowed to commit its
@@ -203,19 +278,32 @@ export default function ContactsPage() {
       return;
     }
 
-    // Fetch tags for these contacts
+    // Fetch tags and custom values for these contacts
     const contactIds = contactRows.map((c) => c.id);
-    const { data: contactTags } = await supabase
-      .from('contact_tags')
-      .select('contact_id, tag_id')
-      .in('contact_id', contactIds);
+    const [tagsRes, customValsRes] = await Promise.all([
+      supabase
+        .from('contact_tags')
+        .select('contact_id, tag_id')
+        .in('contact_id', contactIds),
+      supabase
+        .from('contact_custom_values')
+        .select('contact_id, custom_field_id, value')
+        .in('contact_id', contactIds),
+    ]);
     if (seq !== fetchSeq.current) return; // superseded by a newer fetch
 
     const tagsByContact: Record<string, string[]> = {};
-    contactTags?.forEach((ct) => {
+    tagsRes.data?.forEach((ct) => {
       if (!tagsByContact[ct.contact_id]) tagsByContact[ct.contact_id] = [];
       tagsByContact[ct.contact_id].push(ct.tag_id);
     });
+
+    const valMap: Record<string, Record<string, string>> = {};
+    customValsRes.data?.forEach((v) => {
+      if (!valMap[v.contact_id]) valMap[v.contact_id] = {};
+      valMap[v.contact_id][v.custom_field_id] = v.value ?? '';
+    });
+    setCustomValuesMap(valMap);
 
     const enriched: ContactWithTags[] = contactRows.map((c) => ({
       ...c,
@@ -236,6 +324,11 @@ export default function ContactsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTags();
   }, [fetchTags]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCustomFields();
+  }, [fetchCustomFields]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -369,14 +462,48 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* VIEW / TOGGLE COLUMNS */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  <SlidersHorizontal className="size-4" />
+                  Columns
+                </Button>
+              }
+            />
+            <DropdownMenuContent
+              align="end"
+              className="w-52 border-border bg-popover text-popover-foreground"
+            >
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs">Toggle Columns</DropdownMenuLabel>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              {columns.map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={col.visible}
+                  onCheckedChange={() => toggleColumn(col.id)}
+                  className="text-xs"
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {canEditSettings && (
             <Button
               variant="outline"
               onClick={() => setCustomFieldsOpen(true)}
               className="border-border text-muted-foreground hover:bg-muted"
             >
-              <SlidersHorizontal className="size-4" />
-              {t('customFieldsBtn')}
+              <Columns3 className="size-4" />
+              Manage Columns
             </Button>
           )}
           <GatedButton
@@ -560,19 +687,38 @@ export default function ContactsPage() {
                   aria-label={t('selectAllOnPage')}
                 />
               </TableHead>
-              <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
-              <TableHead className="text-muted-foreground">{t('tableColumns.phone')}</TableHead>
-              <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.email')}</TableHead>
-              <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.company')}</TableHead>
-              <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.tags')}</TableHead>
-              <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.createdAt')}</TableHead>
+              {isColVisible('name') && (
+                <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
+              )}
+              {isColVisible('phone') && (
+                <TableHead className="text-muted-foreground">{t('tableColumns.phone')}</TableHead>
+              )}
+              {isColVisible('email') && (
+                <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.email')}</TableHead>
+              )}
+              {isColVisible('company') && (
+                <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.company')}</TableHead>
+              )}
+              {isColVisible('tags') && (
+                <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.tags')}</TableHead>
+              )}
+              {isColVisible('created_at') && (
+                <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.createdAt')}</TableHead>
+              )}
+              {columns
+                .filter((c) => c.isCustom && c.visible)
+                .map((col) => (
+                  <TableHead key={col.id} className="text-muted-foreground text-xs whitespace-nowrap">
+                    {col.label}
+                  </TableHead>
+                ))}
               <TableHead className="text-muted-foreground w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={columns.filter((c) => c.visible).length + 2} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">{t('loading')}</p>
@@ -581,7 +727,7 @@ export default function ContactsPage() {
               </TableRow>
             ) : contacts.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={columns.filter((c) => c.visible).length + 2} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -619,50 +765,87 @@ export default function ContactsPage() {
                       aria-label={t('selectContact', { name: contact.name || contact.phone })}
                     />
                   </TableCell>
-                  <TableCell className="text-foreground font-medium">
-                    {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground font-mono text-xs">
-                    {contact.phone}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden md:table-cell text-sm">
-                    {contact.email || <span className="text-muted-foreground">-</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell text-sm">
-                    {contact.company || <span className="text-muted-foreground">-</span>}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <div className="flex flex-wrap gap-1">
-                      {contact.tags && contact.tags.length > 0 ? (
-                        contact.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                            style={{
-                              backgroundColor: tag.color + '20',
-                              color: tag.color,
-                            }}
-                          >
-                            {tag.name}
+                  {isColVisible('name') && (
+                    <TableCell className="text-foreground font-medium">
+                      {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                    </TableCell>
+                  )}
+                  {isColVisible('phone') && (
+                    <TableCell className="text-muted-foreground font-mono text-xs">
+                      {contact.phone}
+                    </TableCell>
+                  )}
+                  {isColVisible('email') && (
+                    <TableCell className="text-muted-foreground hidden md:table-cell text-sm">
+                      {contact.email || <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                  )}
+                  {isColVisible('company') && (
+                    <TableCell className="text-muted-foreground hidden lg:table-cell text-sm">
+                      {contact.company || <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                  )}
+                  {isColVisible('tags') && (
+                    <TableCell className="hidden md:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {contact.tags && contact.tags.length > 0 ? (
+                          contact.tags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag.id}
+                              className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              style={{
+                                backgroundColor: tag.color + '20',
+                                color: tag.color,
+                              }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
+                        )}
+                        {contact.tags && contact.tags.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{contact.tags.length - 3}
                           </span>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                      {contact.tags && contact.tags.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground">
-                          +{contact.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
-                    {new Date(contact.created_at).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                  {isColVisible('created_at') && (
+                    <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
+                      {new Date(contact.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </TableCell>
+                  )}
+                  {columns
+                    .filter((c) => c.isCustom && c.visible)
+                    .map((col) => {
+                      const val = customValuesMap[contact.id]?.[col.id];
+                      return (
+                        <TableCell key={col.id} className="text-xs text-foreground">
+                          {!val ? (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          ) : col.fieldType === 'select' ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-muted/60 border-border text-foreground font-normal"
+                            >
+                              {val}
+                            </Badge>
+                          ) : col.fieldType === 'number' ? (
+                            <span className="font-mono text-xs text-foreground">{val}</span>
+                          ) : (
+                            <span className="text-xs text-foreground truncate max-w-[180px] inline-block">
+                              {val}
+                            </span>
+                          )}
+                        </TableCell>
+                      );
                     })}
-                  </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger
@@ -755,6 +938,7 @@ export default function ContactsPage() {
         contact={editContact}
         contactTags={editContactTags}
         onSaved={() => {
+          fetchCustomFields();
           fetchContacts();
           fetchTags();
         }}
@@ -769,21 +953,32 @@ export default function ContactsPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         contactId={detailContactId}
-        onUpdated={fetchContacts}
+        onUpdated={() => {
+          fetchCustomFields();
+          fetchContacts();
+        }}
       />
 
       {/* Import Modal */}
       <ImportModal
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImported={fetchContacts}
+        onImported={() => {
+          fetchCustomFields();
+          fetchContacts();
+        }}
       />
 
-      {/* Custom Fields Manager (admin+) */}
+      {/* Custom Column Manager (admin+) */}
       {canEditSettings && (
-        <CustomFieldsManager
+        <CustomColumnManager
           open={customFieldsOpen}
           onOpenChange={setCustomFieldsOpen}
+          entityType="contact"
+          onFieldsChanged={() => {
+            fetchCustomFields();
+            fetchContacts();
+          }}
         />
       )}
 

@@ -34,6 +34,7 @@ describe('parseContactCsv', () => {
       hasPhoneColumn: true,
       hasTagsColumn: true,
       hasCompanyColumn: false,
+      discoveredCustomColumns: [],
       rows: [
         {
           phone: '+15551234567',
@@ -41,6 +42,8 @@ describe('parseContactCsv', () => {
           email: undefined,
           company: undefined,
           tagNames: ['VIP', 'Lead'],
+          notes: undefined,
+          customFieldValues: undefined,
         },
         {
           phone: '+15559876543',
@@ -48,6 +51,8 @@ describe('parseContactCsv', () => {
           email: undefined,
           company: undefined,
           tagNames: ['Customer'],
+          notes: undefined,
+          customFieldValues: undefined,
         },
       ],
     });
@@ -77,6 +82,7 @@ describe('parseContactCsv', () => {
       hasPhoneColumn: true,
       hasTagsColumn: false,
       hasCompanyColumn: false,
+      discoveredCustomColumns: [],
       rows: [
         {
           phone: '+15551234567',
@@ -85,6 +91,7 @@ describe('parseContactCsv', () => {
           company: undefined,
           tagNames: [],
           notes: undefined,
+          customFieldValues: undefined,
         },
       ],
     });
@@ -104,5 +111,17 @@ describe('parseContactCsv', () => {
     expect(result.rows[0].notes).toContain('City: Lahore');
     expect(result.rows[0].notes).toContain('Budget: 2.2 Cr');
     expect(result.rows[0].notes).toContain('Notes: Near Chirag Market');
+    expect(result.discoveredCustomColumns.map((c) => c.name)).toEqual([
+      'Date',
+      'City',
+      'Area',
+      'Property Type',
+      'Size',
+      'Budget',
+      'Investor',
+      'Notes',
+    ]);
+    expect(result.rows[0].customFieldValues?.City).toBe('Lahore');
+    expect(result.rows[0].customFieldValues?.Budget).toBe('2.2 Cr');
   });
 });

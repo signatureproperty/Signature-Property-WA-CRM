@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import type { PropertyListing, PropertyListingStatus } from '@/types';
+import type { PropertyListing, PropertyListingStatus, CustomField } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -102,6 +102,10 @@ export function ListingForm({
   const [tags, setTags] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState('');
 
+  // Custom Fields (Dynamic Columns)
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+
   // Auto-generate title helper: "{Size} {Unit} {Type} in {Area}"
   function buildAutoTitle(sz: string, un: string, typ: string, ar: string) {
     const parts: string[] = [];
@@ -198,8 +202,27 @@ export function ListingForm({
         }
       }
       setNewTagName('');
+      fetchCustomFields();
     }
   }, [open, listing, account?.id, supabase]);
+
+  async function fetchCustomFields() {
+    if (!account?.id) return;
+    const { data } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('account_id', account.id)
+      .eq('entity_type', 'listing')
+      .order('field_name');
+
+    if (data) setCustomFields(data as CustomField[]);
+
+    if (listing?.custom_fields) {
+      setCustomValues(listing.custom_fields as Record<string, string>);
+    } else {
+      setCustomValues({});
+    }
+  }
 
   function handleAddTag() {
     const trimmed = newTagName.trim();
@@ -246,6 +269,7 @@ export function ListingForm({
         documents: documents.trim() || null,
         description: description.trim() || null,
         tags,
+        custom_fields: customValues,
         created_by: user?.id || null,
       };
 
@@ -636,6 +660,88 @@ export function ListingForm({
               className="bg-muted border-border text-foreground resize-none text-sm placeholder:text-muted-foreground"
             />
           </div>
+
+          {/* DYNAMIC CUSTOM FIELDS */}
+          {customFields.length > 0 && (
+            <div className="space-y-3 pt-3 border-t border-border">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Custom Fields ({customFields.length})
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {customFields.map((field) => {
+                  const val = customValues[field.field_name] || '';
+                  const opts =
+                    (field.field_options as { options?: string[] })?.options || [];
+                  return (
+                    <div key={field.id} className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        {field.field_name}
+                      </Label>
+                      {field.field_type === 'select' ? (
+                        <Select
+                          value={val || undefined}
+                          onValueChange={(v) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.field_name]: v ?? '',
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-full bg-muted border-border text-foreground text-xs h-9">
+                            <SelectValue placeholder={`Select ${field.field_name}`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {opts.map((opt) => (
+                              <SelectItem key={opt} value={opt} className="text-xs">
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : field.field_type === 'number' ? (
+                        <Input
+                          type="number"
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.field_name]: e.target.value,
+                            }))
+                          }
+                          placeholder={field.field_name}
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      ) : field.field_type === 'date' ? (
+                        <Input
+                          type="date"
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.field_name]: e.target.value,
+                            }))
+                          }
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      ) : (
+                        <Input
+                          value={val}
+                          onChange={(e) =>
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [field.field_name]: e.target.value,
+                            }))
+                          }
+                          placeholder={field.field_name}
+                          className="bg-muted border-border text-foreground text-xs h-9"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* MODAL FOOTER - Matches ContactForm perfectly */}
           <DialogFooter className="bg-popover border-border pt-2 border-t mt-4">

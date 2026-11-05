@@ -1,8 +1,7 @@
 /**
  * CSV parsing for the contacts import modal. Shared + unit-tested so
  * tag-column handling stays aligned with phone/name/email/company.
- * Enhanced to support Real Estate sheets (Number, Name, City, Area,
- * Property Type, Size, Budget, Investor, Notes).
+ * Enhanced to support Real Estate sheets and dynamic custom columns.
  */
 
 export interface ParsedContactRow {
@@ -14,6 +13,13 @@ export interface ParsedContactRow {
   tagNames: string[];
   /** Consolidated lead notes from Real Estate fields. */
   notes?: string;
+  /** Key-value map of all custom columns for this row (e.g. { 'City': 'Lahore', 'Budget': '2.2 Cr' }) */
+  customFieldValues?: Record<string, string>;
+}
+
+export interface DiscoveredCustomColumn {
+  name: string;
+  sampleValues: string[];
 }
 
 /** Split a CSV cell into unique tag names (case-insensitive de-dupe). */
@@ -41,13 +47,13 @@ export function parseTagCell(value: string | undefined): string[] {
  * - Prepending + when appropriate so international validator accepts it
  */
 export function normalizePhoneForImport(raw: string): string {
-  let val = raw.trim().replace(/["']/g, '');
+  const val = raw.trim().replace(/["']/g, '');
   if (!val) return '';
   if (val.startsWith('+')) {
-    return '+' + val.slice(1).replace(/\D/g, '');
+    return val;
   }
   const digits = val.replace(/\D/g, '');
-  if (!digits) return '';
+  if (!digits) return val;
 
   // Pakistani 11-digit mobile (e.g. 03278572797 -> +923278572797)
   if (digits.length === 11 && digits.startsWith('03')) {
@@ -59,10 +65,6 @@ export function normalizePhoneForImport(raw: string): string {
   }
   // Pakistani 12-digit with 92 prefix (e.g. 923278572797 -> +923278572797)
   if (digits.length === 12 && digits.startsWith('923')) {
-    return '+' + digits;
-  }
-  // Standard 10-15 digit phone with no trunk 0 (e.g. 14155551212)
-  if (digits.length >= 8 && digits.length <= 15 && !digits.startsWith('0')) {
     return '+' + digits;
   }
 
@@ -77,6 +79,8 @@ export interface ParseContactCsvResult {
   hasTagsColumn: boolean;
   /** True when the CSV header includes a `company` column. */
   hasCompanyColumn: boolean;
+  /** Discovered custom columns not covered by base fields (e.g. City, Area, Budget, Investor). */
+  discoveredCustomColumns: DiscoveredCustomColumn[];
 }
 
 function normalizeHeaderName(name: string): string {
@@ -95,11 +99,12 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       hasPhoneColumn: false,
       hasTagsColumn: false,
       hasCompanyColumn: false,
+      discoveredCustomColumns: [],
     };
   }
 
   const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
-  const rawHeaders = parseCsvLine(lines[0], delimiter);
+  const rawHeaders = parseCsvLine(lines[0], delimiter).map((h) => h.replace(/["']/g, '').trim());
   const headers = rawHeaders.map(normalizeHeaderName);
 
   // Phone column synonyms
@@ -124,6 +129,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       hasPhoneColumn: false,
       hasTagsColumn: false,
       hasCompanyColumn: false,
+      discoveredCustomColumns: [],
     };
   }
 
@@ -140,7 +146,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const companyIdx = findHeaderIndex(headers, ['company', 'organization', 'agency']);
   const tagsIdx = findHeaderIndex(headers, ['tags', 'tag']);
 
-  // Real estate lead fields
+  // Real estate lead fields (for fallback notes/tags)
   const cityIdx = findHeaderIndex(headers, ['city']);
   const areaIdx = findHeaderIndex(headers, ['area', 'location', 'sector', 'phase']);
   const typeIdx = findHeaderIndex(headers, ['property type', 'propertytype', 'type', 'category']);
@@ -150,7 +156,20 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const notesIdx = findHeaderIndex(headers, ['notes', 'note', 'remarks', 'comments', 'detail']);
   const dateIdx = findHeaderIndex(headers, ['date', 'created date']);
 
+  // Any non-base column is considered a custom column
+  const baseIndices = new Set([phoneIdx, nameIdx, emailIdx, companyIdx, tagsIdx]);
+  const customColumnIndices: number[] = [];
+  for (let idx = 0; idx < rawHeaders.length; idx++) {
+    if (!baseIndices.has(idx) && rawHeaders[idx]) {
+      customColumnIndices.push(idx);
+    }
+  }
+
   const rows: ParsedContactRow[] = [];
+  const customColSamples: Record<string, string[]> = {};
+  for (const cIdx of customColumnIndices) {
+    customColSamples[rawHeaders[cIdx]] = [];
+  }
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -203,6 +222,19 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
 
     const compiledNotes = noteSegments.length > 0 ? noteSegments.join(' | ') : undefined;
 
+    // Collect custom column values for this row
+    const customValues: Record<string, string> = {};
+    for (const cIdx of customColumnIndices) {
+      const colName = rawHeaders[cIdx];
+      const val = values[cIdx]?.replace(/["']/g, '').trim() ?? '';
+      if (val) {
+        customValues[colName] = val;
+        if (customColSamples[colName].length < 10) {
+          customColSamples[colName].push(val);
+        }
+      }
+    }
+
     rows.push({
       phone,
       name: nameIdx >= 0 ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
@@ -210,16 +242,23 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       company: companyIdx >= 0 ? values[companyIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
       tagNames: rowTags,
       notes: compiledNotes,
+      customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,
     });
   }
 
   const hasTags = tagsIdx >= 0 || cityIdx >= 0 || areaIdx >= 0 || typeIdx >= 0 || investorIdx >= 0;
+
+  const discoveredCustomColumns: DiscoveredCustomColumn[] = customColumnIndices.map((cIdx) => ({
+    name: rawHeaders[cIdx],
+    sampleValues: customColSamples[rawHeaders[cIdx]] || [],
+  }));
 
   return {
     rows,
     hasPhoneColumn: true,
     hasTagsColumn: hasTags,
     hasCompanyColumn: companyIdx >= 0,
+    discoveredCustomColumns,
   };
 }
 

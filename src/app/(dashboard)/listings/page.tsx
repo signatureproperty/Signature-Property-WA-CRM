@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import type { PropertyListing, PropertyListingStatus } from '@/types';
+import type { PropertyListing, PropertyListingStatus, CustomField } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +57,7 @@ import {
   LayoutGrid,
   List as ListIcon,
   SlidersHorizontal,
+  Columns3,
   Loader2,
   CheckCircle2,
   Upload,
@@ -64,6 +65,7 @@ import {
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingDetailView } from '@/components/listings/listing-detail-view';
 import { ListingImportModal } from '@/components/listings/listing-import-modal';
+import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import { useTranslations } from 'next-intl';
 
 const STATUS_BADGES: Record<
@@ -95,6 +97,10 @@ interface ColumnConfig {
   id: string;
   label: string;
   visible: boolean;
+  isCustom?: boolean;
+  fieldName?: string;
+  fieldType?: string;
+  options?: string[];
 }
 
 const DEFAULT_COLUMNS: ColumnConfig[] = [
@@ -125,9 +131,10 @@ export default function ListingsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [cityFilter, setCityFilter] = useState<string>('all');
 
-  // View mode
+  // View mode & Custom columns
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS);
+  const [columnManagerOpen, setColumnManagerOpen] = useState(false);
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -145,14 +152,47 @@ export default function ListingsPage() {
     if (!account?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('property_listings')
-        .select('*')
-        .eq('account_id', account.id)
-        .order('created_at', { ascending: false });
+      const [listingsRes, customFieldsRes] = await Promise.all([
+        supabase
+          .from('property_listings')
+          .select('*')
+          .eq('account_id', account.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('custom_fields')
+          .select('*')
+          .eq('account_id', account.id)
+          .eq('entity_type', 'listing')
+          .order('field_name'),
+      ]);
 
-      if (error) throw error;
-      setListings((data as PropertyListing[]) || []);
+      if (listingsRes.error) throw listingsRes.error;
+      setListings((listingsRes.data as PropertyListing[]) || []);
+
+      if (customFieldsRes.data) {
+        const fields = customFieldsRes.data as CustomField[];
+        setColumns((prev) => {
+          const prevVisibilityMap = new Map(prev.map((c) => [c.id, c.visible]));
+          const customCols: ColumnConfig[] = fields.map((f) => ({
+            id: f.id,
+            label: f.field_name,
+            fieldName: f.field_name,
+            visible: prevVisibilityMap.has(f.id)
+              ? (prevVisibilityMap.get(f.id) as boolean)
+              : true,
+            isCustom: true,
+            fieldType: f.field_type,
+            options: (f.field_options as { options?: string[] } | null)?.options,
+          }));
+          const defaultCols = DEFAULT_COLUMNS.map((c) => ({
+            ...c,
+            visible: prevVisibilityMap.has(c.id)
+              ? (prevVisibilityMap.get(c.id) as boolean)
+              : c.visible,
+          }));
+          return [...defaultCols, ...customCols];
+        });
+      }
     } catch (err: unknown) {
       console.error('Error fetching listings:', err);
       toast.error('Could not load property listings.');
@@ -355,6 +395,16 @@ export default function ListingsPage() {
             </DropdownMenu>
           )}
 
+          {/* MANAGE COLUMNS BUTTON */}
+          <Button
+            variant="outline"
+            onClick={() => setColumnManagerOpen(true)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <Columns3 className="size-4" />
+            Manage Columns
+          </Button>
+
           {/* IMPORT BUTTON */}
           <Button
             variant="outline"
@@ -476,6 +526,13 @@ export default function ListingsPage() {
                   {isColVisible('documents') && (
                     <TableHead className="text-xs text-muted-foreground">Documents</TableHead>
                   )}
+                  {columns
+                    .filter((c) => c.isCustom && c.visible)
+                    .map((col) => (
+                      <TableHead key={col.id} className="text-xs text-muted-foreground whitespace-nowrap">
+                        {col.label}
+                      </TableHead>
+                    ))}
                   <TableHead className="w-12 text-right text-xs text-muted-foreground" />
                 </TableRow>
               </TableHeader>
@@ -616,6 +673,36 @@ export default function ListingsPage() {
                           {item.documents || '-'}
                         </TableCell>
                       )}
+
+                      {/* Custom Columns */}
+                      {columns
+                        .filter((c) => c.isCustom && c.visible)
+                        .map((col) => {
+                          const val =
+                            item.custom_fields?.[col.label] ??
+                            item.custom_fields?.[col.id] ??
+                            item.custom_fields?.[col.fieldName || ''];
+                          return (
+                            <TableCell key={col.id} className="text-xs text-foreground">
+                              {!val ? (
+                                <span className="text-muted-foreground text-xs">-</span>
+                              ) : col.fieldType === 'select' ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-muted/60 border-border text-foreground font-normal"
+                                >
+                                  {val}
+                                </Badge>
+                              ) : col.fieldType === 'number' ? (
+                                <span className="font-mono text-xs text-foreground">{val}</span>
+                              ) : (
+                                <span className="text-xs text-foreground truncate max-w-[180px] inline-block">
+                                  {val}
+                                </span>
+                              )}
+                            </TableCell>
+                          );
+                        })}
 
                       {/* 3 DOTS ACTIONS MENU */}
                       <TableCell
@@ -925,6 +1012,14 @@ export default function ListingsPage() {
         onOpenChange={setImportOpen}
         onImported={fetchListings}
         existingCount={listings.length}
+      />
+
+      {/* CUSTOM COLUMN MANAGER MODAL */}
+      <CustomColumnManager
+        open={columnManagerOpen}
+        onOpenChange={setColumnManagerOpen}
+        entityType="listing"
+        onFieldsChanged={fetchListings}
       />
     </div>
   );
