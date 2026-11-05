@@ -67,6 +67,17 @@ import { ListingDetailView } from '@/components/listings/listing-detail-view';
 import { ListingImportModal } from '@/components/listings/listing-import-modal';
 import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import {
+  RealEstateFilterPopover,
+  RealEstateActiveFilterPills,
+} from '@/components/common/real-estate-filter-popover';
+import {
+  type RealEstateFilters,
+  INITIAL_FILTERS,
+  countActiveFilters,
+  isPriceInRange,
+  isSizeInRange,
+} from '@/lib/real-estate/filter-utils';
+import {
   buildUnifiedListingColumns,
   DEFAULT_LISTING_COLUMNS_DEF,
   formatDateCompact,
@@ -133,9 +144,7 @@ export default function ListingsPage() {
 
   // Search & Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [cityFilter, setCityFilter] = useState<string>('all');
+  const [filters, setFilters] = useState<RealEstateFilters>(INITIAL_FILTERS);
 
   // View mode & Custom columns
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -246,28 +255,45 @@ export default function ListingsPage() {
         }
       }
 
-      // Status
-      if (statusFilter !== 'all' && l.status !== statusFilter) {
-        return false;
-      }
-
-      // Type
-      if (typeFilter !== 'all' && l.property_type !== typeFilter) {
-        return false;
+      // Property Type
+      if (filters.propertyType && filters.propertyType !== 'all') {
+        if (l.property_type?.toLowerCase() !== filters.propertyType.toLowerCase()) return false;
       }
 
       // City
-      if (cityFilter !== 'all' && l.city !== cityFilter) {
-        return false;
+      if (filters.city && filters.city !== 'all') {
+        if (l.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
+      }
+
+      // Area
+      if (filters.area?.trim()) {
+        if (!l.area?.toLowerCase().includes(filters.area.trim().toLowerCase())) return false;
+      }
+
+      // Status
+      if (filters.status && filters.status !== 'all') {
+        if (l.status !== filters.status) return false;
+      }
+
+      // Price / Demand Range
+      if (filters.minPrice?.trim() || filters.maxPrice?.trim()) {
+        if (!isPriceInRange(l.demand_price, filters.minPrice, filters.maxPrice)) {
+          return false;
+        }
+      }
+
+      // Size Range with Unit
+      if (filters.minSize?.trim() || filters.maxSize?.trim()) {
+        if (!isSizeInRange(l.size, filters.minSize, filters.maxSize, filters.sizeUnit || 'Marla')) {
+          return false;
+        }
       }
 
       return true;
     });
-  }, [listings, search, statusFilter, typeFilter, cityFilter]);
+  }, [listings, search, filters]);
 
-  const hasActiveFilters = Boolean(
-    search || statusFilter !== 'all' || typeFilter !== 'all' || cityFilter !== 'all'
-  );
+  const hasActiveFilters = Boolean(search || countActiveFilters(filters) > 0);
 
   async function handleQuickStatusChange(listingId: string, newStatus: PropertyListingStatus) {
     try {
@@ -426,65 +452,39 @@ export default function ListingsPage() {
       </div>
 
       {/* SEARCH & FILTERS BAR */}
-      <div className="flex flex-col sm:flex-row gap-2 items-center">
-        {/* Search Input */}
-        <div className="relative w-full sm:w-72 md:w-80">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder={t('searchPlaceholder')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-muted border-border text-foreground placeholder:text-muted-foreground"
+      <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2 items-center">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder={t('searchPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-muted border-border text-foreground placeholder:text-muted-foreground h-9 text-xs"
+            />
+          </div>
+
+          {/* Unified Filter Button & Popover */}
+          <RealEstateFilterPopover
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableCities={availableCities}
+            showStatus={true}
           />
         </div>
 
-        {/* Status Filter */}
-        <div className="w-full sm:w-36">
-          <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val ?? 'all')}>
-            <SelectTrigger className="w-full bg-muted border-border text-foreground">
-              <SelectValue placeholder={t('filterAllStatus')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('filterAllStatus')}</SelectItem>
-              <SelectItem value="available">{t('statusAvailable')}</SelectItem>
-              <SelectItem value="sold">{t('statusSold')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Property Type Filter */}
-        <div className="w-full sm:w-44">
-          <Select value={typeFilter} onValueChange={(val) => setTypeFilter(val ?? 'all')}>
-            <SelectTrigger className="w-full bg-muted border-border text-foreground">
-              <SelectValue placeholder={t('filterAllTypes')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('filterAllTypes')}</SelectItem>
-              {availableTypes.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* City Filter */}
-        <div className="w-full sm:w-36">
-          <Select value={cityFilter} onValueChange={(val) => setCityFilter(val ?? 'all')}>
-            <SelectTrigger className="w-full bg-muted border-border text-foreground">
-              <SelectValue placeholder={t('allCities')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('allCities')}</SelectItem>
-              {availableCities.map((city) => (
-                <SelectItem key={city} value={city}>
-                  {city}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Active Filter Pills */}
+        <RealEstateActiveFilterPills
+          filters={filters}
+          onRemoveFilter={(key) => {
+            setFilters({
+              ...filters,
+              [key]: key === 'propertyType' || key === 'city' || key === 'status' ? 'all' : '',
+            });
+          }}
+          onClearAll={() => setFilters({ ...INITIAL_FILTERS })}
+        />
       </div>
 
       {/* CONTENT LISTINGS */}

@@ -329,61 +329,66 @@ export function CustomColumnManager({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border bg-popover text-popover-foreground sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="border-border bg-popover text-popover-foreground sm:max-w-3xl max-h-[85vh] overflow-y-auto p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-foreground">
-            <Columns3 className="size-5 text-primary" />
-            Manage {entityTitle} Columns
-          </DialogTitle>
-          <DialogDescription className="text-muted-foreground text-xs">
-            Create new custom columns, or edit and remove default columns. All changes immediately sync with your table and forms.
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-foreground text-base">
+              <Columns3 className="size-5 text-primary" />
+              Manage {entityTitle} Columns
+            </DialogTitle>
+            <Badge variant="outline" className="text-xs font-normal border-primary/30 text-primary bg-primary/5">
+              {entityType === 'listing' ? 'Listings Table' : 'Contacts Table'}
+            </Badge>
+          </div>
+          <DialogDescription className="text-muted-foreground text-xs mt-1">
+            Customize column names, hide default columns, or create new custom fields. All changes are automatically synced with tables and forms.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="space-y-6 pt-2">
           {/* CREATE / EDIT FORM */}
-          <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-3">
+          <div className="rounded-xl border border-border bg-muted/25 p-4 space-y-3.5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-foreground">
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
                 {editingColId
                   ? isEditingDefault
-                    ? `Rename Default Column: ${fieldName}`
+                    ? `Rename Default Column: "${fieldName}"`
                     : 'Edit Custom Column'
-                  : 'Add New Column'}
+                  : 'Add New Custom Column'}
               </span>
               {editingColId && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={resetForm}
-                  className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+                  className="h-6 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel Edit
                 </Button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
                   Column Name / Label
                 </label>
                 <Input
                   value={fieldName}
                   onChange={(e) => setFieldName(e.target.value)}
-                  placeholder="e.g. Asking Price, City, Area"
-                  className="h-8 text-xs bg-background border-border"
+                  placeholder="e.g. Asking Price, City, Area, Investor"
+                  className="h-9 text-xs bg-background border-border text-foreground"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
                   Data Type
                 </label>
                 {isEditingDefault ? (
-                  <div className="h-8 flex items-center px-3 rounded-md bg-muted border border-border text-xs text-muted-foreground">
-                    <span className="capitalize">{fieldType}</span>
-                    <span className="ml-1 text-[10px] text-muted-foreground/70">(Default System Field)</span>
+                  <div className="h-9 flex items-center px-3 rounded-md bg-muted border border-border text-xs text-muted-foreground">
+                    <span className="capitalize font-medium">{fieldType}</span>
+                    <span className="ml-1.5 text-[11px] text-muted-foreground/70">(Default System Field)</span>
                   </div>
                 ) : (
                   <Select
@@ -392,7 +397,7 @@ export function CustomColumnManager({
                       if (val) setFieldType(val as CustomFieldType);
                     }}
                   >
-                    <SelectTrigger className="h-8 text-xs bg-background border-border">
+                    <SelectTrigger className="h-9 text-xs bg-background border-border text-foreground">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -416,11 +421,11 @@ export function CustomColumnManager({
 
             {/* DROPDOWN OPTIONS CONFIG (when fieldType === 'select' and custom) */}
             {fieldType === 'select' && !isEditingDefault && (
-              <div className="space-y-2 pt-1 border-t border-border/60">
-                <label className="text-[11px] font-medium text-muted-foreground">
+              <div className="space-y-2 pt-2 border-t border-border/60">
+                <label className="text-xs font-medium text-muted-foreground">
                   Dropdown Options
                 </label>
-                <div className="flex gap-1.5">
+                <div className="flex gap-2">
                   <Input
                     value={newOptionInput}
                     onChange={(e) => setNewOptionInput(e.target.value)}
@@ -430,15 +435,15 @@ export function CustomColumnManager({
                         handleAddOption();
                       }
                     }}
-                    placeholder="Type an option and press Add (e.g. Commercial)"
-                    className="h-8 text-xs bg-background border-border flex-1"
+                    placeholder="Type an option and press Add (e.g. Commercial, Direct Buyer)"
+                    className="h-9 text-xs bg-background border-border flex-1 text-foreground"
                   />
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={handleAddOption}
-                    className="h-8 text-xs border-border shrink-0"
+                    className="h-9 text-xs border-border shrink-0"
                   >
                     <Plus className="size-3.5 mr-1" />
                     Add Option
@@ -451,7 +456,7 @@ export function CustomColumnManager({
                       <Badge
                         key={i}
                         variant="secondary"
-                        className="text-xs font-normal pl-2 pr-1 py-0.5 flex items-center gap-1"
+                        className="text-xs font-normal pl-2.5 pr-1 py-0.5 flex items-center gap-1 bg-muted border border-border"
                       >
                         {opt}
                         <button
@@ -473,12 +478,12 @@ export function CustomColumnManager({
                 size="sm"
                 onClick={handleSaveField}
                 disabled={saving || !fieldName.trim()}
-                className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="h-9 px-4 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
               >
                 {saving ? (
-                  <Loader2 className="size-3.5 animate-spin mr-1" />
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
                 ) : (
-                  <Check className="size-3.5 mr-1" />
+                  <Check className="size-3.5 mr-1.5" />
                 )}
                 {editingColId ? 'Save Changes' : 'Create Column'}
               </Button>
@@ -486,39 +491,38 @@ export function CustomColumnManager({
           </div>
 
           {/* ACTIVE COLUMNS LIST */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-              <span>Active Columns ({activeColumns.length})</span>
-              <span className="text-[10px] lowercase text-muted-foreground/70">default & custom</span>
-            </h4>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Active Columns ({activeColumns.length})
+              </h4>
+              <span className="text-[11px] text-muted-foreground">
+                Showing in table & form
+              </span>
+            </div>
 
             {loading ? (
-              <div className="flex items-center justify-center p-6">
-                <Loader2 className="size-5 animate-spin text-primary" />
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="size-6 animate-spin text-primary" />
               </div>
             ) : activeColumns.length === 0 ? (
-              <div className="rounded-lg border border-border p-6 text-center text-xs text-muted-foreground">
+              <div className="rounded-lg border border-border p-8 text-center text-xs text-muted-foreground">
                 No active columns found.
               </div>
             ) : (
-              <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {activeColumns.map((col) => {
                   const isRenamed = col.isDefault && col.label !== col.defaultLabel;
                   return (
                     <div
                       key={col.id}
-                      className="flex items-center justify-between p-2.5 hover:bg-muted/30 transition-colors"
+                      className="rounded-lg border border-border bg-card/60 p-3 hover:border-primary/40 transition-colors flex items-center justify-between gap-2 shadow-xs"
                     >
-                      <div className="space-y-0.5 min-w-0 pr-2">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-xs text-foreground truncate">
                             {col.label}
                           </span>
-                          {isRenamed && (
-                            <span className="text-[10px] text-muted-foreground truncate">
-                              (Original: {col.defaultLabel})
-                            </span>
-                          )}
                           <Badge
                             variant={col.isDefault ? 'outline' : 'secondary'}
                             className={`text-[10px] px-1.5 py-0 ${
@@ -533,6 +537,11 @@ export function CustomColumnManager({
                             {col.fieldType}
                           </Badge>
                         </div>
+                        {isRenamed && (
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            Default: {col.defaultLabel}
+                          </p>
+                        )}
                         {col.options && col.options.length > 0 && (
                           <p className="text-[11px] text-muted-foreground truncate">
                             Options: {col.options.join(', ')}
@@ -562,7 +571,7 @@ export function CustomColumnManager({
                           }`}
                           title={
                             col.required
-                              ? 'Required core column'
+                              ? 'Required core column (cannot be removed)'
                               : col.isDefault
                               ? 'Remove default column'
                               : 'Delete custom column'
@@ -584,22 +593,27 @@ export function CustomColumnManager({
 
           {/* REMOVED / HIDDEN DEFAULT COLUMNS (IF ANY) */}
           {deletedColumns.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-border">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Removed Default Columns ({deletedColumns.length})
-              </h4>
-              <div className="rounded-lg border border-border divide-y divide-border overflow-hidden bg-muted/20">
+            <div className="space-y-2.5 pt-3 border-t border-border">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Removed Default Columns ({deletedColumns.length})
+                </h4>
+                <span className="text-[11px] text-muted-foreground">
+                  Can be restored anytime
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {deletedColumns.map((col) => (
                   <div
                     key={col.id}
-                    className="flex items-center justify-between p-2.5 opacity-75 hover:opacity-100 transition-opacity"
+                    className="rounded-lg border border-border bg-muted/20 p-2.5 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity"
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground line-through">
                         {col.label}
                       </span>
                       <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">
-                        Removed
+                        Hidden
                       </Badge>
                     </div>
 

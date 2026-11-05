@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
@@ -61,6 +61,17 @@ import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import {
+  RealEstateFilterPopover,
+  RealEstateActiveFilterPills,
+} from '@/components/common/real-estate-filter-popover';
+import {
+  type RealEstateFilters,
+  INITIAL_FILTERS,
+  countActiveFilters,
+  isPriceInRange,
+  isSizeInRange,
+} from '@/lib/real-estate/filter-utils';
+import {
   buildUnifiedContactColumns,
   DEFAULT_CONTACT_COLUMNS_DEF,
   formatDateCompact,
@@ -113,8 +124,9 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  // Tag filter — contacts shown must have ANY of these tags (OR).
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  // Real Estate Filters (Property Type, City, Area, Price, Size, Tags)
+  const [filters, setFilters] = useState<RealEstateFilters>(INITIAL_FILTERS);
+  const selectedTagIds = filters.tagIds;
 
   // Columns & Custom Fields
   const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_CONTACT_COLUMNS);
@@ -193,11 +205,10 @@ export default function ContactsPage() {
       const map: Record<string, Tag> = {};
       data.forEach((t) => (map[t.id] = t));
       setTagsMap(map);
-      // Drop any filter selections whose tag no longer exists (e.g. a tag
-      // deleted elsewhere) so it can't linger invisibly in the query.
-      setSelectedTagIds((prev) => {
-        const pruned = prev.filter((id) => map[id]);
-        return pruned.length === prev.length ? prev : pruned;
+      // Drop any filter selections whose tag no longer exists
+      setFilters((prev) => {
+        const pruned = (prev.tagIds || []).filter((id) => map[id]);
+        return pruned.length === prev.tagIds.length ? prev : { ...prev, tagIds: pruned };
       });
     }
   }, [supabase]);
@@ -218,18 +229,15 @@ export default function ContactsPage() {
     let count: number;
     let countIsExact = true;
 
-    if (selectedTagIds.length > 0) {
-      // Tag filter active — resolve it server-side (join + distinct +
-      // windowed total count + pagination) so a tag covering many
-      // contacts can't silently truncate the result or overflow an IN
-      // clause. See migration 025_filter_contacts_by_tags.
+    if (filters.tagIds.length > 0) {
+      // Tag filter active — resolve it server-side
       const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
-        p_tag_ids: selectedTagIds,
+        p_tag_ids: filters.tagIds,
         p_search: contactSearchPattern(term),
         p_limit: PAGE_SIZE,
         p_offset: from,
       });
-      if (seq !== fetchSeq.current) return; // superseded by a newer fetch
+      if (seq !== fetchSeq.current) return;
       if (error) {
         toast.error(t('toastFailedLoad'));
         setLoading(false);
@@ -249,8 +257,18 @@ export default function ContactsPage() {
       const searchFilter = contactSearchFilter(term, { includeEmail: true });
       if (searchFilter) query = query.or(searchFilter);
 
+      if (filters.propertyType && filters.propertyType !== 'all') {
+        query = query.eq('property_type', filters.propertyType);
+      }
+      if (filters.city && filters.city !== 'all') {
+        query = query.ilike('city', `%${filters.city}%`);
+      }
+      if (filters.area?.trim()) {
+        query = query.ilike('area', `%${filters.area.trim()}%`);
+      }
+
       const { data, count: exactCount, error } = await query;
-      if (seq !== fetchSeq.current) return; // superseded by a newer fetch
+      if (seq !== fetchSeq.current) return;
       const pageInRange = error
         ? pageAfterRangeError(page, PAGE_SIZE, error)
         : null;
@@ -265,6 +283,18 @@ export default function ContactsPage() {
       }
       contactRows = data ?? [];
       count = exactCount ?? 0;
+    }
+
+    // Client-side refinement for price and size range if present
+    if (filters.minPrice?.trim() || filters.maxPrice?.trim()) {
+      contactRows = contactRows.filter((c) =>
+        isPriceInRange(c.budget, filters.minPrice, filters.maxPrice)
+      );
+    }
+    if (filters.minSize?.trim() || filters.maxSize?.trim()) {
+      contactRows = contactRows.filter((c) =>
+        isSizeInRange(c.size, filters.minSize, filters.maxSize, filters.sizeUnit || 'Marla')
+      );
     }
 
     setTotalCount(count);
@@ -293,7 +323,7 @@ export default function ContactsPage() {
         .select('contact_id, custom_field_id, value')
         .in('contact_id', contactIds),
     ]);
-    if (seq !== fetchSeq.current) return; // superseded by a newer fetch
+    if (seq !== fetchSeq.current) return;
 
     const tagsByContact: Record<string, string[]> = {};
     tagsRes.data?.forEach((ct) => {
@@ -317,7 +347,7 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+  }, [supabase, page, search, filters, tagsMap, t]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -433,26 +463,19 @@ export default function ContactsPage() {
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
 
-  // Tag filter helpers. Every change resets to page 0 — the result set
-  // shrinks/grows so page N may no longer be valid (mirrors the search box).
   const allTags = Object.values(tagsMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-  const hasActiveFilters = search.trim().length > 0 || selectedTagIds.length > 0;
 
-  function toggleTagFilter(tagId: string) {
-    setSelectedTagIds((prev) =>
-      prev.includes(tagId)
-        ? prev.filter((id) => id !== tagId)
-        : [...prev, tagId]
-    );
-    setPage(0);
-  }
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    contacts.forEach((c) => {
+      if (c.city) set.add(c.city);
+    });
+    return Array.from(set);
+  }, [contacts]);
 
-  function clearTagFilters() {
-    setSelectedTagIds([]);
-    setPage(0);
-  }
+  const hasActiveFilters = search.trim().length > 0 || countActiveFilters(filters) > 0;
 
   return (
     <div className="space-y-6">
@@ -531,120 +554,57 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Search + tag filter */}
+      {/* Search + Real Estate Filters */}
       <div className="space-y-2">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative w-full max-w-sm">
+        <div className="flex flex-col sm:flex-row gap-2 items-center">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                // Reset pagination when the query changes — the result
-                // set shrinks/grows, page N may no longer be valid.
                 setPage(0);
               }}
               placeholder={t('searchPlaceholder')}
-              className="pl-8 bg-card border-border text-foreground placeholder:text-muted-foreground"
+              className="pl-9 bg-muted border-border text-foreground placeholder:text-muted-foreground h-9 text-xs"
             />
           </div>
 
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="outline"
-                  className="border-border text-muted-foreground hover:bg-muted shrink-0"
-                />
-              }
-            >
-              <Filter className="size-4" />
-              {t('filterByTags')}
-              {selectedTagIds.length > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                  {selectedTagIds.length}
-                </span>
-              )}
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-64 p-0">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-                <span className="text-sm font-medium text-popover-foreground">
-                  {t('filterByTags')}
-                </span>
-                {selectedTagIds.length > 0 && (
-                  <button
-                    onClick={clearTagFilters}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {t('clearAll')}
-                  </button>
-                )}
-              </div>
-              {allTags.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground text-center">
-                  {t('noTagsYet')}
-                </p>
-              ) : (
-                <div className="max-h-64 overflow-y-auto py-1">
-                  {allTags.map((tag) => (
-                    <label
-                      key={tag.id}
-                      className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-muted/50"
-                    >
-                      <Checkbox
-                        checked={selectedTagIds.includes(tag.id)}
-                        onCheckedChange={() => toggleTagFilter(tag.id)}
-                        aria-label={t('filterByTag', { name: tag.name })}
-                      />
-                      <span
-                        className="size-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                      />
-                      <span className="text-sm text-popover-foreground truncate">
-                        {tag.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
+          <RealEstateFilterPopover
+            filters={filters}
+            onFiltersChange={(newFilters) => {
+              setFilters(newFilters);
+              setPage(0);
+            }}
+            availableCities={availableCities}
+            availableTags={allTags}
+            showStatus={false}
+          />
         </div>
 
-        {/* Active tag-filter chips */}
-        {selectedTagIds.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {selectedTagIds.map((id) => {
-              const tag = tagsMap[id];
-              if (!tag) return null;
-              return (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-                  style={{
-                    backgroundColor: tag.color + '20',
-                    color: tag.color,
-                  }}
-                >
-                  {tag.name}
-                  <button
-                    onClick={() => toggleTagFilter(id)}
-                    aria-label={t('removeTagFilter', { name: tag.name })}
-                    className="hover:opacity-70"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              );
-            })}
-            <button
-              onClick={clearTagFilters}
-              className="text-xs text-muted-foreground hover:text-foreground px-1"
-            >
-              {t('clearAll')}
-            </button>
-          </div>
-        )}
+        {/* Active Filter Badges */}
+        <RealEstateActiveFilterPills
+          filters={filters}
+          availableTags={allTags}
+          onRemoveFilter={(key, val) => {
+            if (key === 'tagIds' && val) {
+              setFilters({
+                ...filters,
+                tagIds: filters.tagIds.filter((id) => id !== val),
+              });
+            } else {
+              setFilters({
+                ...filters,
+                [key]: key === 'propertyType' || key === 'city' ? 'all' : '',
+              });
+            }
+            setPage(0);
+          }}
+          onClearAll={() => {
+            setFilters({ ...INITIAL_FILTERS });
+            setPage(0);
+          }}
+        />
       </div>
 
       {/* Bulk action bar */}
