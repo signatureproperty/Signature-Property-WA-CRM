@@ -287,18 +287,22 @@ export function ListingDetailView({
             {/* Quick Status Buttons */}
             <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <span className="text-xs text-muted-foreground mr-1">Status:</span>
-              {(['available', 'under_offer', 'sold', 'rented'] as PropertyListingStatus[]).map(
+              {(['available', 'sold'] as PropertyListingStatus[]).map(
                 (st) => (
                   <Button
                     key={st}
                     variant={listing.status === st ? 'default' : 'outline'}
                     size="sm"
-                    className={`h-7 px-2.5 text-xs capitalize ${
-                      listing.status === st ? 'bg-primary text-primary-foreground' : ''
+                    className={`h-7 px-3 text-xs capitalize ${
+                      listing.status === st
+                        ? st === 'available'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-red-600 text-white hover:bg-red-700'
+                        : ''
                     }`}
                     onClick={() => onStatusChange(listing.id, st)}
                   >
-                    {st.replace('_', ' ')}
+                    {st === 'available' ? 'Available' : 'Sold'}
                   </Button>
                 )
               )}

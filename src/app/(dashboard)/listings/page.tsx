@@ -388,9 +388,7 @@ export default function ListingsPage() {
             <SelectContent>
               <SelectItem value="all">{t('filterAllStatus')}</SelectItem>
               <SelectItem value="available">{t('statusAvailable')}</SelectItem>
-              <SelectItem value="under_offer">{t('statusUnderOffer')}</SelectItem>
               <SelectItem value="sold">{t('statusSold')}</SelectItem>
-              <SelectItem value="rented">{t('statusRented')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
