@@ -351,6 +351,7 @@ export function ImportModal({
           property_type: row.property_type || null,
           size: row.size || null,
           budget: row.budget || null,
+          notes: row.notes || null,
           ...(row.created_at ? { created_at: row.created_at } : {}),
         }));
 
@@ -526,14 +527,19 @@ export function ImportModal({
   }
 
   const preview = parsedRows.slice(0, PREVIEW_LIMIT);
-  // Tags: OR — show when the CSV declares a column or preview rows carry
-  // values, so an all-empty tags column still renders for validation.
-  const previewHasTags =
-    hasTagsColumn || preview.some((row) => row.tagNames.length > 0);
-  // Company: AND — hide unless the CSV declares it and preview has data,
-  // avoiding an all-dash column that wastes horizontal space.
+  const previewHasSerial = preview.some((r) => !!r.serial_no);
+  const previewHasCity = preview.some((r) => !!r.city);
+  const previewHasArea = preview.some((r) => !!r.area);
+  const previewHasType = preview.some((r) => !!r.property_type);
+  const previewHasSize = preview.some((r) => !!r.size);
+  const previewHasBudget = preview.some((r) => !!r.budget);
+  const previewHasNotes = preview.some((r) => !!r.notes);
+  const previewHasEmail = preview.some((r) => !!r.email);
   const previewHasCompany =
     hasCompanyColumn && preview.some((row) => row.company?.trim());
+  const previewHasTags =
+    hasTagsColumn && preview.some((row) => row.tagNames.length > 0);
+  const previewCustomCols = discoveredColumns.map((c) => c.name);
 
   const tagStats = useMemo(() => {
     const names = new Set<string>();
@@ -548,7 +554,7 @@ export function ImportModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[min(90vh,720px)] flex-col gap-0 overflow-hidden border-border/80 bg-popover p-0 text-popover-foreground sm:max-w-2xl">
+      <DialogContent className="flex max-h-[min(90vh,760px)] flex-col gap-0 overflow-hidden border-border/80 bg-popover p-0 text-popover-foreground sm:max-w-4xl">
         <div className="shrink-0 space-y-4 border-b border-border/80 px-6 pt-6 pb-5">
           <DialogHeader className="gap-1.5">
             <DialogTitle className="text-lg text-popover-foreground">
@@ -639,19 +645,64 @@ export function ImportModal({
               </div>
 
               <div className="overflow-hidden rounded-xl border border-border ring-1 ring-border/50">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[32rem] text-xs">
+                <div className="overflow-x-auto max-h-[260px]">
+                  <table className="w-full min-w-[36rem] text-xs">
                     <thead>
-                      <tr className="border-b border-border bg-background/60">
+                      <tr className="border-b border-border bg-background/60 sticky top-0 z-10 backdrop-blur-xs">
+                        {previewHasSerial && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Sr No
+                          </th>
+                        )}
                         <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
                           {t('columns.phone')}
                         </th>
                         <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
                           {t('columns.name')}
                         </th>
-                        <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                          {t('columns.email')}
-                        </th>
+                        {previewHasCity && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            City
+                          </th>
+                        )}
+                        {previewHasArea && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Area
+                          </th>
+                        )}
+                        {previewHasType && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Property Type
+                          </th>
+                        )}
+                        {previewHasSize && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Size
+                          </th>
+                        )}
+                        {previewHasBudget && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Budget
+                          </th>
+                        )}
+                        {previewCustomCols.map((cName) => (
+                          <th
+                            key={cName}
+                            className="px-3 py-2 text-left font-medium whitespace-nowrap text-primary"
+                          >
+                            {cName}
+                          </th>
+                        ))}
+                        {previewHasNotes && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            Notes
+                          </th>
+                        )}
+                        {previewHasEmail && (
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
+                            {t('columns.email')}
+                          </th>
+                        )}
                         {previewHasCompany && (
                           <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
                             {t('columns.company')}
@@ -670,25 +721,67 @@ export function ImportModal({
                           key={i}
                           className="bg-popover/40 transition-colors hover:bg-muted/30"
                         >
+                          {previewHasSerial && (
+                            <td className="px-3 py-2 font-mono text-[11px] font-medium text-primary whitespace-nowrap">
+                              {row.serial_no || '—'}
+                            </td>
+                          )}
                           <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                             <PreviewCell
                               value={row.phone}
                               mono
-                              maxWidth="max-w-[7.5rem]"
+                              maxWidth="max-w-[8.5rem]"
                             />
                           </td>
                           <td className="px-3 py-2 text-popover-foreground">
                             <PreviewCell
                               value={row.name || '—'}
-                              maxWidth="max-w-[8.5rem]"
+                              maxWidth="max-w-[9rem]"
                             />
                           </td>
-                          <td className="px-3 py-2 text-muted-foreground">
-                            <PreviewCell
-                              value={row.email || '—'}
-                              maxWidth="max-w-[10rem]"
-                            />
-                          </td>
+                          {previewHasCity && (
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              <PreviewCell value={row.city || '—'} maxWidth="max-w-[7rem]" />
+                            </td>
+                          )}
+                          {previewHasArea && (
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              <PreviewCell value={row.area || '—'} maxWidth="max-w-[8rem]" />
+                            </td>
+                          )}
+                          {previewHasType && (
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              <PreviewCell value={row.property_type || '—'} maxWidth="max-w-[7rem]" />
+                            </td>
+                          )}
+                          {previewHasSize && (
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">
+                              <PreviewCell value={row.size || '—'} maxWidth="max-w-[6.5rem]" />
+                            </td>
+                          )}
+                          {previewHasBudget && (
+                            <td className="px-3 py-2 text-foreground font-semibold whitespace-nowrap">
+                              <PreviewCell value={row.budget || '—'} maxWidth="max-w-[6.5rem]" />
+                            </td>
+                          )}
+                          {previewCustomCols.map((cName) => (
+                            <td key={cName} className="px-3 py-2 text-primary font-medium whitespace-nowrap">
+                              <PreviewCell value={row.customFieldValues?.[cName] || '—'} maxWidth="max-w-[8rem]" />
+                            </td>
+                          ))}
+                          {previewHasNotes && (
+                            <td className="px-3 py-2 text-muted-foreground max-w-[12rem] truncate" title={row.notes}>
+                              <PreviewCell value={row.notes || '—'} maxWidth="max-w-[12rem]" />
+                            </td>
+                          )}
+                          {previewHasEmail && (
+                            <td className="px-3 py-2 text-muted-foreground">
+                              <PreviewCell
+                                value={row.email || '—'}
+                                maxWidth="max-w-[10rem]"
+                              />
+                            </td>
+                          )}
                           {previewHasCompany && (
                             <td className="px-3 py-2 text-muted-foreground">
                               <PreviewCell

@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -83,6 +84,7 @@ export function ContactForm({
   const [sizeValue, setSizeValue] = useState('');
   const [sizeUnit, setSizeUnit] = useState<SizeUnit>('Marla');
   const [budget, setBudget] = useState('');
+  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Duplicate-phone detection for NEW contacts. `exact` (same digits)
@@ -149,6 +151,7 @@ export function ContactForm({
       setArea(contact?.area ?? '');
       setPropertyType(contact?.property_type ?? 'House');
       setBudget(contact?.budget ?? '');
+      setNotes((contact as { notes?: string })?.notes ?? '');
 
       if (contact?.size) {
         const match = contact.size.match(/^([\d.]+)\s*(.*)$/);
@@ -327,6 +330,7 @@ export function ContactForm({
             property_type: propertyType || null,
             size: fullSize,
             budget: budget.trim() || null,
+            notes: notes.trim() || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', contactId);
@@ -347,6 +351,7 @@ export function ContactForm({
             property_type: propertyType || null,
             size: fullSize,
             budget: budget.trim() || null,
+            notes: notes.trim() || null,
           })
           .select('id')
           .single();
@@ -717,6 +722,23 @@ export function ContactForm({
               </div>
             )}
           </div>
+          )}
+
+          {/* Notes / Remarks */}
+          {!columnSettings['notes']?.is_deleted && (
+            <div className="space-y-1.5 pt-1">
+              <Label htmlFor="cf-notes" className="text-muted-foreground text-xs">
+                {columnSettings['notes']?.label || 'Notes / Remarks'}
+              </Label>
+              <Textarea
+                id="cf-notes"
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Client preferences, requirements, follow-up notes..."
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground resize-none"
+              />
+            </div>
           )}
 
           {/* DYNAMIC CUSTOM FIELDS */}

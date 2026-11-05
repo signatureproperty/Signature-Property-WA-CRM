@@ -162,6 +162,7 @@ export function ListingImportModal({
           documents: r.documents || null,
           status: r.status,
           description: r.description || null,
+          notes: r.notes || r.description || null,
           tags: r.tags || [],
           custom_fields: r.customFieldValues || {},
         }));
@@ -203,10 +204,16 @@ export function ListingImportModal({
   const PREVIEW_LIMIT = 5;
   const previewRows = parsedRows.slice(0, PREVIEW_LIMIT);
   const remainingCount = parsedRows.length - previewRows.length;
+  const previewHasCity = previewRows.some((r) => !!r.city);
+  const previewHasArea = previewRows.some((r) => !!r.area);
+  const previewHasPhone = previewRows.some((r) => !!r.contact_number);
+  const previewHasRent = previewRows.some((r) => !!r.potential_rent);
+  const previewHasNotes = previewRows.some((r) => !!r.notes || !!r.description);
+  const previewCustomCols = discoveredColumns.map((c) => c.name);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Building2 className="size-5 text-primary" />
@@ -294,29 +301,71 @@ export function ListingImportModal({
                         <table className="w-full text-left text-xs">
                           <thead className="border-b border-border text-muted-foreground font-medium">
                             <tr>
-                              <th className="px-3 py-2">Ref</th>
-                              <th className="px-3 py-2">Title</th>
-                              <th className="px-3 py-2">Type</th>
-                              <th className="px-3 py-2">Size</th>
-                              <th className="px-3 py-2">Demand</th>
-                              <th className="px-3 py-2">Status</th>
+                              <th className="px-3 py-2 whitespace-nowrap">Ref</th>
+                              <th className="px-3 py-2 whitespace-nowrap">Title</th>
+                              <th className="px-3 py-2 whitespace-nowrap">Type</th>
+                              {(previewHasCity || previewHasArea) && (
+                                <th className="px-3 py-2 whitespace-nowrap">City & Area</th>
+                              )}
+                              <th className="px-3 py-2 whitespace-nowrap">Size</th>
+                              <th className="px-3 py-2 whitespace-nowrap">Demand</th>
+                              {previewHasRent && (
+                                <th className="px-3 py-2 whitespace-nowrap">Rent</th>
+                              )}
+                              {previewHasPhone && (
+                                <th className="px-3 py-2 whitespace-nowrap">Phone</th>
+                              )}
+                              {previewCustomCols.map((cName) => (
+                                <th key={cName} className="px-3 py-2 whitespace-nowrap text-primary font-medium">
+                                  {cName}
+                                </th>
+                              ))}
+                              {previewHasNotes && (
+                                <th className="px-3 py-2 whitespace-nowrap">Notes</th>
+                              )}
+                              <th className="px-3 py-2 whitespace-nowrap">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
                             {previewRows.map((r, idx) => (
                               <tr key={idx} className="hover:bg-muted/30">
-                                <td className="px-3 py-2 font-mono text-[11px] text-primary">
+                                <td className="px-3 py-2 font-mono text-[11px] text-primary whitespace-nowrap">
                                   {r.serial_no || '-'}
                                 </td>
-                                <td className="px-3 py-2 text-foreground font-medium max-w-[150px] truncate">
+                                <td className="px-3 py-2 text-foreground font-medium max-w-[170px] truncate" title={r.title}>
                                   {r.title}
                                 </td>
-                                <td className="px-3 py-2 text-muted-foreground">{r.property_type || '-'}</td>
-                                <td className="px-3 py-2 text-muted-foreground">{r.size || '-'}</td>
-                                <td className="px-3 py-2 text-muted-foreground font-semibold">
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.property_type || '-'}</td>
+                                {(previewHasCity || previewHasArea) && (
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                    {[r.city, r.area].filter(Boolean).join(', ') || '-'}
+                                  </td>
+                                )}
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[11px]">{r.size || '-'}</td>
+                                <td className="px-3 py-2 text-foreground font-semibold whitespace-nowrap">
                                   {r.demand_price || '-'}
                                 </td>
-                                <td className="px-3 py-2">
+                                {previewHasRent && (
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                    {r.potential_rent || '-'}
+                                  </td>
+                                )}
+                                {previewHasPhone && (
+                                  <td className="px-3 py-2 text-muted-foreground font-mono text-[11px] whitespace-nowrap">
+                                    {r.contact_number || '-'}
+                                  </td>
+                                )}
+                                {previewCustomCols.map((cName) => (
+                                  <td key={cName} className="px-3 py-2 text-primary font-medium whitespace-nowrap">
+                                    {r.customFieldValues?.[cName] || '-'}
+                                  </td>
+                                ))}
+                                {previewHasNotes && (
+                                  <td className="px-3 py-2 text-muted-foreground max-w-[150px] truncate" title={r.notes || r.description}>
+                                    {r.notes || r.description || '-'}
+                                  </td>
+                                )}
+                                <td className="px-3 py-2 whitespace-nowrap">
                                   <span
                                     className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                       r.status === 'sold'

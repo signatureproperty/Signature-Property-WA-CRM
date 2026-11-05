@@ -522,6 +522,9 @@ export default function ListingsPage() {
                   {isColVisible('documents') && (
                     <TableHead className="text-xs text-muted-foreground">{getColLabel('documents', 'Documents')}</TableHead>
                   )}
+                  {isColVisible('notes') && (
+                    <TableHead className="text-xs text-muted-foreground">{getColLabel('notes', 'Notes')}</TableHead>
+                  )}
                   {columns
                     .filter((c) => c.isCustom && c.visible)
                     .map((col) => (
@@ -678,6 +681,13 @@ export default function ListingsPage() {
                       {isColVisible('documents') && (
                         <TableCell className="text-xs text-muted-foreground">
                           {item.documents || '-'}
+                        </TableCell>
+                      )}
+
+                      {/* Notes */}
+                      {isColVisible('notes') && (
+                        <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={(item as { notes?: string }).notes || item.description || undefined}>
+                          {(item as { notes?: string }).notes || item.description || '-'}
                         </TableCell>
                       )}
 

@@ -284,6 +284,7 @@ export function ListingForm({
         utilities: utilities.trim() || null,
         documents: documents.trim() || null,
         description: description.trim() || null,
+        notes: description.trim() || null,
         tags,
         custom_fields: customValues,
         created_by: user?.id || null,

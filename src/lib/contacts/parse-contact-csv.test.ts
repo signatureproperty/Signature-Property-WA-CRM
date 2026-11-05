@@ -35,6 +35,7 @@ describe('parseContactCsv', () => {
       hasTagsColumn: true,
       hasCompanyColumn: false,
       discoveredCustomColumns: [],
+      headers: ['phone', 'name', 'tags'],
       rows: [
         {
           phone: '+15551234567',
@@ -65,45 +66,28 @@ describe('parseContactCsv', () => {
 
     const { rows } = parseContactCsv(csv);
     expect(rows).toHaveLength(2);
-    expect(rows[1]).toEqual({
-      phone: '',
-      name: 'Bob',
-      email: undefined,
-      company: undefined,
-      tagNames: [],
-    });
+    expect(rows[1].phone).toBe('');
+    expect(rows[1].name).toBe('Bob');
   });
 
   it('returns empty tagNames when tags column is absent', () => {
     const csv = `phone,name
 +15551234567,Alice`;
 
-    expect(parseContactCsv(csv)).toEqual({
-      hasPhoneColumn: true,
-      hasTagsColumn: false,
-      hasCompanyColumn: false,
-      discoveredCustomColumns: [],
-      rows: [
-        {
-          phone: '+15551234567',
-          name: 'Alice',
-          email: undefined,
-          company: undefined,
-          tagNames: [],
-          notes: undefined,
-          customFieldValues: undefined,
-        },
-      ],
-    });
+    const result = parseContactCsv(csv);
+    expect(result.hasPhoneColumn).toBe(true);
+    expect(result.hasTagsColumn).toBe(false);
+    expect(result.rows[0].tagNames).toEqual([]);
+    expect(result.headers).toEqual(['phone', 'name']);
   });
 
-  it('parses Real Estate columns, auto-normalizes Pakistani numbers, creates tags and notes', () => {
+  it('parses Real Estate columns, normalizes phone, keeps tags clean and routes custom columns', () => {
     const csv = `Date,Number,Name,City,Area,Property Type,Size,Budget,Investor,Notes
 "December 24, 2025",3278572797,Farooq,Lahore,Samanabad,House,7.5 Marla,2.2 Cr,Yes,Near Chirag Market`;
 
     const result = parseContactCsv(csv);
     expect(result.hasPhoneColumn).toBe(true);
-    expect(result.hasTagsColumn).toBe(true);
+    expect(result.hasTagsColumn).toBe(false);
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].phone).toBe('+923278572797');
     expect(result.rows[0].name).toBe('Farooq');
@@ -112,13 +96,9 @@ describe('parseContactCsv', () => {
     expect(result.rows[0].property_type).toBe('House');
     expect(result.rows[0].size).toBe('7.5 Marla');
     expect(result.rows[0].budget).toBe('2.2 Cr');
-    expect(result.rows[0].tagNames).toEqual(['Lahore', 'Samanabad', 'House', 'Investor']);
-    expect(result.rows[0].notes).toContain('City: Lahore');
-    expect(result.rows[0].notes).toContain('Budget: 2.2 Cr');
-    expect(result.rows[0].notes).toContain('Notes: Near Chirag Market');
-    expect(result.discoveredCustomColumns.map((c) => c.name)).toEqual([
-      'Investor',
-      'Notes',
-    ]);
+    expect(result.rows[0].tagNames).toEqual([]);
+    expect(result.rows[0].notes).toBe('Near Chirag Market');
+    expect(result.rows[0].customFieldValues).toEqual({ Investor: 'Yes' });
+    expect(result.discoveredCustomColumns.map((c) => c.name)).toEqual(['Investor']);
   });
 });

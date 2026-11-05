@@ -18,6 +18,7 @@ export interface ParsedListingRow {
   documents?: string;
   status: 'available' | 'sold';
   description?: string;
+  notes?: string;
   tags: string[];
   /** Dynamic unmapped custom fields (e.g. { 'Commission': '1%', 'Plot No': '142' }) */
   customFieldValues?: Record<string, string>;
@@ -27,6 +28,7 @@ export interface ParseListingCsvResult {
   rows: ParsedListingRow[];
   hasRecognizedColumns: boolean;
   discoveredCustomColumns: DiscoveredCustomColumn[];
+  headers: string[];
 }
 
 function normalizeHeaderName(name: string): string {
@@ -50,6 +52,7 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
       rows: [],
       hasRecognizedColumns: false,
       discoveredCustomColumns: [],
+      headers: [],
     };
   }
 
@@ -93,6 +96,7 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
       rows: [],
       hasRecognizedColumns: false,
       discoveredCustomColumns: [],
+      headers: rawHeaders,
     };
   }
 
@@ -216,6 +220,7 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
       documents: docsVal || undefined,
       status,
       description,
+      notes: description || undefined,
       tags: rowTags,
       customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,
     });
@@ -230,5 +235,6 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     rows,
     hasRecognizedColumns: true,
     discoveredCustomColumns,
+    headers: rawHeaders,
   };
 }

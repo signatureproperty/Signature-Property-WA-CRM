@@ -254,7 +254,7 @@ export default function ContactsPage() {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      const searchFilter = contactSearchFilter(term, { includeEmail: true });
+      const searchFilter = contactSearchFilter(term, { includeEmail: true, includeRealEstate: true });
       if (searchFilter) query = query.or(searchFilter);
 
       if (filters.propertyType && filters.propertyType !== 'all') {
@@ -674,6 +674,9 @@ export default function ContactsPage() {
               {isColVisible('budget') && (
                 <TableHead className="text-xs text-muted-foreground">{getColLabel('budget', 'Budget')}</TableHead>
               )}
+              {isColVisible('notes') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('notes', 'Notes')}</TableHead>
+              )}
               {isColVisible('tags') && (
                 <TableHead className="text-muted-foreground text-xs hidden md:table-cell">{getColLabel('tags', t('tableColumns.tags'))}</TableHead>
               )}
@@ -816,6 +819,13 @@ export default function ContactsPage() {
                   {isColVisible('budget') && (
                     <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">
                       {contact.budget || <span className="text-muted-foreground font-normal">-</span>}
+                    </TableCell>
+                  )}
+
+                  {/* Notes */}
+                  {isColVisible('notes') && (
+                    <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={(contact as { notes?: string }).notes || undefined}>
+                      {(contact as { notes?: string }).notes || <span className="text-muted-foreground">-</span>}
                     </TableCell>
                   )}
 

@@ -39,6 +39,8 @@ import {
   Check,
   RotateCcw,
   Sparkles,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 interface CustomColumnManagerProps {
@@ -324,8 +326,53 @@ export function CustomColumnManager({
     }
   }
 
+  const [reordering, setReordering] = useState(false);
+
   const activeColumns = columns.filter((c) => !c.isDeleted);
   const deletedColumns = columns.filter((c) => c.isDeleted);
+
+  async function handleMoveColumn(index: number, direction: 'up' | 'down') {
+    if (!accountId) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= activeColumns.length) return;
+
+    const newActive = [...activeColumns];
+    const [moved] = newActive.splice(index, 1);
+    newActive.splice(targetIndex, 0, moved);
+
+    // Optimistically update columns state
+    setColumns((prev) => {
+      const deleted = prev.filter((c) => c.isDeleted);
+      const updatedActive = newActive.map((c, i) => ({ ...c, displayOrder: i }));
+      return [...updatedActive, ...deleted];
+    });
+
+    setReordering(true);
+    try {
+      const updates = newActive.map((c, i) => ({
+        account_id: accountId,
+        entity_type: entityType,
+        column_id: c.id,
+        label: c.label,
+        is_deleted: false,
+        display_order: i,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from('account_column_settings').upsert(updates, {
+        onConflict: 'account_id,entity_type,column_id',
+      });
+
+      if (error) throw error;
+      onFieldsChanged?.();
+    } catch (err) {
+      console.error('[custom-column-manager] reorder error:', err);
+      toast.error('Failed to update column order.');
+      await fetchData();
+    } finally {
+      setReordering(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -511,7 +558,7 @@ export function CustomColumnManager({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {activeColumns.map((col) => {
+                {activeColumns.map((col, index) => {
                   const isRenamed = col.isDefault && col.label !== col.defaultLabel;
                   return (
                     <div
@@ -549,7 +596,27 @@ export function CustomColumnManager({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={index === 0 || reordering}
+                          onClick={() => handleMoveColumn(index, 'up')}
+                          className="size-7 p-0 text-muted-foreground hover:text-foreground disabled:opacity-25"
+                          title="Move column up"
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={index === activeColumns.length - 1 || reordering}
+                          onClick={() => handleMoveColumn(index, 'down')}
+                          className="size-7 p-0 text-muted-foreground hover:text-foreground disabled:opacity-25"
+                          title="Move column down"
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

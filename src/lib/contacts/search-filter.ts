@@ -25,23 +25,26 @@ export function contactSearchPattern(rawSearch: string): string | null {
 
 export interface ContactSearchOptions {
   includeEmail?: boolean;
+  includeRealEstate?: boolean;
 }
 
 export function contactSearchFilter(
   rawSearch: string,
-  { includeEmail = false }: ContactSearchOptions = {}
+  { includeEmail = false, includeRealEstate = false }: ContactSearchOptions = {}
 ): string | null {
   const search = sanitizeContactSearch(rawSearch);
   if (!search) return null;
   const textPattern = escapeLikeUnderscore(search);
-  const conditions = [
-    `name.ilike.*${textPattern}*`,
-    `city.ilike.*${textPattern}*`,
-    `area.ilike.*${textPattern}*`,
-    `serial_no.ilike.*${textPattern}*`,
-    `property_type.ilike.*${textPattern}*`,
-    `budget.ilike.*${textPattern}*`,
-  ];
+  const conditions = [`name.ilike.*${textPattern}*`];
+  if (includeRealEstate) {
+    conditions.push(
+      `city.ilike.*${textPattern}*`,
+      `area.ilike.*${textPattern}*`,
+      `serial_no.ilike.*${textPattern}*`,
+      `property_type.ilike.*${textPattern}*`,
+      `budget.ilike.*${textPattern}*`
+    );
+  }
   const digits = phoneSearchDigits(rawSearch);
   if (digits) conditions.push(`phone.ilike.*${digits}*`);
   else if (/\d/.test(search)) conditions.push(`phone.ilike.*${textPattern}*`);

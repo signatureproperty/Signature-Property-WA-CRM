@@ -153,6 +153,7 @@ export interface AccountColumnSetting {
   column_id: string;
   label: string;
   is_deleted: boolean;
+  display_order?: number;
   created_at?: string;
   updated_at?: string;
 }

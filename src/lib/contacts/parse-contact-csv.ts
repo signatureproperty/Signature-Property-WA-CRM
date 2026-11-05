@@ -82,12 +82,14 @@ export interface ParseContactCsvResult {
   rows: ParsedContactRow[];
   /** True when the CSV header includes a recognized phone/number column. */
   hasPhoneColumn: boolean;
-  /** True when the CSV header includes a `tags` column or Real Estate tagging columns. */
+  /** True when the CSV header includes an explicit `tags` column. */
   hasTagsColumn: boolean;
   /** True when the CSV header includes a `company` column. */
   hasCompanyColumn: boolean;
-  /** Discovered custom columns not covered by base fields (e.g. City, Area, Budget, Investor). */
+  /** Discovered custom columns not covered by base fields (e.g. Investor, 100ft road). */
   discoveredCustomColumns: DiscoveredCustomColumn[];
+  /** All raw headers from the CSV in order. */
+  headers: string[];
 }
 
 function normalizeHeaderName(name: string): string {
@@ -107,6 +109,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       hasTagsColumn: false,
       hasCompanyColumn: false,
       discoveredCustomColumns: [],
+      headers: [],
     };
   }
 
@@ -137,6 +140,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       hasTagsColumn: false,
       hasCompanyColumn: false,
       discoveredCustomColumns: [],
+      headers: rawHeaders,
     };
   }
 
@@ -170,25 +174,28 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const typeIdx = findHeaderIndex(headers, ['property type', 'propertytype', 'type', 'category']);
   const sizeIdx = findHeaderIndex(headers, ['size', 'area size', 'plot size']);
   const budgetIdx = findHeaderIndex(headers, ['budget', 'demand', 'price']);
-  const investorIdx = findHeaderIndex(headers, ['investor', 'client type', 'lead type']);
   const notesIdx = findHeaderIndex(headers, ['notes', 'note', 'remarks', 'comments', 'detail']);
   const dateIdx = findHeaderIndex(headers, ['date', 'created date', 'date entered', 'created_at']);
 
   // Any non-base column is considered a dynamic custom column
-  const baseIndices = new Set([
-    phoneIdx,
-    nameIdx,
-    emailIdx,
-    companyIdx,
-    tagsIdx,
-    serialIdx,
-    cityIdx,
-    areaIdx,
-    typeIdx,
-    sizeIdx,
-    budgetIdx,
-    dateIdx,
-  ]);
+  const baseIndices = new Set(
+    [
+      phoneIdx,
+      nameIdx,
+      emailIdx,
+      companyIdx,
+      tagsIdx,
+      serialIdx,
+      cityIdx,
+      areaIdx,
+      typeIdx,
+      sizeIdx,
+      budgetIdx,
+      dateIdx,
+      notesIdx,
+    ].filter((idx) => idx >= 0)
+  );
+
   const customColumnIndices: number[] = [];
   for (let idx = 0; idx < rawHeaders.length; idx++) {
     if (!baseIndices.has(idx) && rawHeaders[idx]) {
@@ -210,48 +217,19 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     const rawPhone = values[phoneIdx]?.replace(/["']/g, '').trim() ?? '';
     const phone = normalizePhoneForImport(rawPhone);
 
+    // ONLY populate tags from an actual tags/tag column. Never dump City/Area/Type into tags!
     const rowTags: string[] = [];
     if (tagsIdx >= 0) {
       rowTags.push(...parseTagCell(values[tagsIdx]?.replace(/["']/g, '')));
     }
 
-    // Auto-generate tags from Real Estate fields if present
     const cityVal = cityIdx >= 0 ? values[cityIdx]?.replace(/["']/g, '').trim() : '';
     const areaVal = areaIdx >= 0 ? values[areaIdx]?.replace(/["']/g, '').trim() : '';
     const typeVal = typeIdx >= 0 ? values[typeIdx]?.replace(/["']/g, '').trim() : '';
     const sizeVal = sizeIdx >= 0 ? values[sizeIdx]?.replace(/["']/g, '').trim() : '';
     const budgetVal = budgetIdx >= 0 ? values[budgetIdx]?.replace(/["']/g, '').trim() : '';
-    const investorVal = investorIdx >= 0 ? values[investorIdx]?.replace(/["']/g, '').trim() : '';
     const userNotes = notesIdx >= 0 ? values[notesIdx]?.replace(/["']/g, '').trim() : '';
     const dateVal = dateIdx >= 0 ? values[dateIdx]?.replace(/["']/g, '').trim() : '';
-
-    if (cityVal && !rowTags.map((t) => t.toLowerCase()).includes(cityVal.toLowerCase())) {
-      rowTags.push(cityVal);
-    }
-    if (areaVal && !rowTags.map((t) => t.toLowerCase()).includes(areaVal.toLowerCase())) {
-      rowTags.push(areaVal);
-    }
-    if (typeVal && !rowTags.map((t) => t.toLowerCase()).includes(typeVal.toLowerCase())) {
-      rowTags.push(typeVal);
-    }
-    if (investorVal && (investorVal.toLowerCase() === 'yes' || investorVal.toLowerCase() === 'investor')) {
-      if (!rowTags.map((t) => t.toLowerCase()).includes('investor')) {
-        rowTags.push('Investor');
-      }
-    }
-
-    // Compile notes
-    const noteSegments: string[] = [];
-    if (dateVal) noteSegments.push(`Date: ${dateVal}`);
-    if (cityVal) noteSegments.push(`City: ${cityVal}`);
-    if (areaVal) noteSegments.push(`Area: ${areaVal}`);
-    if (typeVal) noteSegments.push(`Property Type: ${typeVal}`);
-    if (sizeVal) noteSegments.push(`Size: ${sizeVal}`);
-    if (budgetVal) noteSegments.push(`Budget: ${budgetVal}`);
-    if (investorVal) noteSegments.push(`Investor: ${investorVal}`);
-    if (userNotes) noteSegments.push(`Notes: ${userNotes}`);
-
-    const compiledNotes = noteSegments.length > 0 ? noteSegments.join(' | ') : undefined;
 
     // Collect custom column values for this row
     const customValues: Record<string, string> = {};
@@ -287,12 +265,12 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       budget: budgetVal || undefined,
       created_at: parsedCreatedAt,
       tagNames: rowTags,
-      notes: compiledNotes,
+      notes: userNotes || undefined,
       customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,
     });
   }
 
-  const hasTags = tagsIdx >= 0 || cityIdx >= 0 || areaIdx >= 0 || typeIdx >= 0 || investorIdx >= 0;
+  const hasTags = tagsIdx >= 0 && rows.some((r) => r.tagNames.length > 0);
 
   const discoveredCustomColumns: DiscoveredCustomColumn[] = customColumnIndices.map((cIdx) => ({
     name: rawHeaders[cIdx],
@@ -305,6 +283,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     hasTagsColumn: hasTags,
     hasCompanyColumn: companyIdx >= 0,
     discoveredCustomColumns,
+    headers: rawHeaders,
   };
 }
 

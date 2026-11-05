@@ -11,6 +11,7 @@ export interface ColumnDefinition {
   fieldType: CustomFieldType;
   options?: string[];
   isDeleted: boolean;
+  displayOrder?: number;
 }
 
 export const DEFAULT_CONTACT_COLUMNS_DEF: {
@@ -33,6 +34,7 @@ export const DEFAULT_CONTACT_COLUMNS_DEF: {
   },
   { id: 'size', defaultLabel: 'Size', fieldType: 'text' },
   { id: 'budget', defaultLabel: 'Budget', fieldType: 'text' },
+  { id: 'notes', defaultLabel: 'Notes', fieldType: 'text' },
   { id: 'tags', defaultLabel: 'Tags', fieldType: 'select' },
   { id: 'email', defaultLabel: 'Email', fieldType: 'text' },
   { id: 'company', defaultLabel: 'Company', fieldType: 'text' },
@@ -62,6 +64,7 @@ export const DEFAULT_LISTING_COLUMNS_DEF: {
     options: ['Available', 'Sold', 'Under Offer', 'Rented'],
   },
   { id: 'area_city', defaultLabel: 'City & Area', fieldType: 'text' },
+  { id: 'notes', defaultLabel: 'Notes', fieldType: 'text' },
   { id: 'potential_rent', defaultLabel: 'Potential Rent', fieldType: 'text' },
   { id: 'dimensions', defaultLabel: 'Dimensions', fieldType: 'text' },
   { id: 'contact_number', defaultLabel: 'Contact Phone', fieldType: 'text' },
@@ -82,7 +85,7 @@ export function buildUnifiedContactColumns(
   // Default secondary columns hidden initially unless toggled
   const defaultHiddenByDefault = new Set(['email', 'company']);
 
-  const defaultCols: ColumnDefinition[] = DEFAULT_CONTACT_COLUMNS_DEF.map((def) => {
+  const defaultCols: ColumnDefinition[] = DEFAULT_CONTACT_COLUMNS_DEF.map((def, idx) => {
     const s = settingsMap.get(def.id);
     const label = s?.label?.trim() || def.defaultLabel;
     const isDeleted = s?.is_deleted ?? false;
@@ -90,6 +93,7 @@ export function buildUnifiedContactColumns(
     const isVis = prevVisibilityMap?.has(def.id)
       ? (prevVisibilityMap.get(def.id) as boolean)
       : initialVisible;
+    const displayOrder = typeof s?.display_order === 'number' ? s.display_order : idx;
 
     return {
       id: def.id,
@@ -102,18 +106,24 @@ export function buildUnifiedContactColumns(
       fieldType: def.fieldType,
       options: def.options,
       isDeleted,
+      displayOrder,
     };
   });
 
-  const customCols: ColumnDefinition[] = customFields.map((f) => {
+  const customCols: ColumnDefinition[] = customFields.map((f, fIdx) => {
+    const s = settingsMap.get(f.id);
     const isVis = prevVisibilityMap?.has(f.id)
       ? (prevVisibilityMap.get(f.id) as boolean)
       : true;
     const rawOpts = (f.field_options as { options?: string[] } | null)?.options;
+    const displayOrder =
+      typeof s?.display_order === 'number'
+        ? s.display_order
+        : DEFAULT_CONTACT_COLUMNS_DEF.length + fIdx;
 
     return {
       id: f.id,
-      label: f.field_name,
+      label: s?.label?.trim() || f.field_name,
       defaultLabel: f.field_name,
       visible: isVis,
       isDefault: false,
@@ -121,10 +131,13 @@ export function buildUnifiedContactColumns(
       fieldType: (f.field_type as CustomFieldType) || 'text',
       options: Array.isArray(rawOpts) ? rawOpts : undefined,
       isDeleted: false,
+      displayOrder,
     };
   });
 
-  return [...defaultCols, ...customCols];
+  return [...defaultCols, ...customCols].sort(
+    (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+  );
 }
 
 /**
@@ -146,7 +159,7 @@ export function buildUnifiedListingColumns(
     'documents',
   ]);
 
-  const defaultCols: ColumnDefinition[] = DEFAULT_LISTING_COLUMNS_DEF.map((def) => {
+  const defaultCols: ColumnDefinition[] = DEFAULT_LISTING_COLUMNS_DEF.map((def, idx) => {
     const s = settingsMap.get(def.id);
     const label = s?.label?.trim() || def.defaultLabel;
     const isDeleted = s?.is_deleted ?? false;
@@ -154,6 +167,7 @@ export function buildUnifiedListingColumns(
     const isVis = prevVisibilityMap?.has(def.id)
       ? (prevVisibilityMap.get(def.id) as boolean)
       : initialVisible;
+    const displayOrder = typeof s?.display_order === 'number' ? s.display_order : idx;
 
     return {
       id: def.id,
@@ -166,18 +180,24 @@ export function buildUnifiedListingColumns(
       fieldType: def.fieldType,
       options: def.options,
       isDeleted,
+      displayOrder,
     };
   });
 
-  const customCols: ColumnDefinition[] = customFields.map((f) => {
+  const customCols: ColumnDefinition[] = customFields.map((f, fIdx) => {
+    const s = settingsMap.get(f.id);
     const isVis = prevVisibilityMap?.has(f.id)
       ? (prevVisibilityMap.get(f.id) as boolean)
       : true;
     const rawOpts = (f.field_options as { options?: string[] } | null)?.options;
+    const displayOrder =
+      typeof s?.display_order === 'number'
+        ? s.display_order
+        : DEFAULT_LISTING_COLUMNS_DEF.length + fIdx;
 
     return {
       id: f.id,
-      label: f.field_name,
+      label: s?.label?.trim() || f.field_name,
       defaultLabel: f.field_name,
       visible: isVis,
       isDefault: false,
@@ -185,10 +205,13 @@ export function buildUnifiedListingColumns(
       fieldType: (f.field_type as CustomFieldType) || 'text',
       options: Array.isArray(rawOpts) ? rawOpts : undefined,
       isDeleted: false,
+      displayOrder,
     };
   });
 
-  return [...defaultCols, ...customCols];
+  return [...defaultCols, ...customCols].sort(
+    (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+  );
 }
 
 /**
