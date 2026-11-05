@@ -712,3 +712,38 @@ export interface QuickReply {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================================
+// Real Estate Property Listings (migration 060)
+// ============================================================
+
+export type PropertyListingStatus = 'available' | 'under_offer' | 'sold' | 'rented';
+
+export interface PropertyListing {
+  id: string;
+  account_id: string;
+  serial_no?: string | null;
+  title: string;
+  contact_number?: string | null;
+  city?: string | null;
+  area?: string | null;
+  address?: string | null;
+  property_type?: string | null;
+  size?: string | null;
+  storey?: string | null;
+  front_dimension?: string | null;
+  length_dimension?: string | null;
+  demand_price?: string | null;
+  potential_rent?: string | null;
+  utilities?: string | null;
+  documents?: string | null;
+  status: PropertyListingStatus;
+  description?: string | null;
+  tags: string[];
+  custom_fields: Record<string, string | number | boolean | null>;
+  images: string[];
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+

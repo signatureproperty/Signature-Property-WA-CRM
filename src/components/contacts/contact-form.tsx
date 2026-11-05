@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface ContactFormProps {
@@ -49,7 +49,7 @@ export function ContactForm({
 }: ContactFormProps) {
   const t = useTranslations('Contacts.form');
   const supabase = createClient();
-  const { accountId } = useAuth();
+  const { accountId, user } = useAuth();
   const isEdit = !!contact;
 
   const [name, setName] = useState('');
@@ -70,6 +70,42 @@ export function ContactForm({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [creatingTag, setCreatingTag] = useState(false);
+
+  const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+  async function handleCreateTag() {
+    const trimmed = newTagName.trim();
+    if (!trimmed || !accountId) return;
+    setCreatingTag(true);
+    try {
+      const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+      const { data, error } = await supabase
+        .from('tags')
+        .insert({
+          account_id: accountId,
+          user_id: user?.id,
+          name: trimmed,
+          color: randomColor,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setTags((prev) => [...prev, data]);
+        setSelectedTagIds((prev) => [...prev, data.id]);
+        setNewTagName('');
+        toast.success(`Tag "${data.name}" created`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to create tag');
+    } finally {
+      setCreatingTag(false);
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -338,6 +374,34 @@ export function ContactForm({
 
           <div className="space-y-2">
             <Label className="text-muted-foreground">{t('tagsLabel')}</Label>
+            
+            {/* Inline Quick Tag Creator */}
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="New tag name (e.g. Urgent Buyer, DHA)..."
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCreateTag();
+                  }
+                }}
+                className="bg-muted border-border text-xs h-8 flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCreateTag}
+                disabled={creatingTag || !newTagName.trim()}
+                className="h-8 text-xs shrink-0"
+              >
+                {creatingTag ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3 mr-1" />}
+                Add Tag
+              </Button>
+            </div>
+
             {loadingTags ? (
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <Loader2 className="size-3 animate-spin" />
