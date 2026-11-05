@@ -9,11 +9,18 @@ export interface ParsedContactRow {
   name?: string;
   email?: string;
   company?: string;
+  serial_no?: string;
+  city?: string;
+  area?: string;
+  property_type?: string;
+  size?: string;
+  budget?: string;
+  created_at?: string;
   /** Tag names from the optional `tags` column or auto-derived from Real Estate columns. */
   tagNames: string[];
   /** Consolidated lead notes from Real Estate fields. */
   notes?: string;
-  /** Key-value map of all custom columns for this row (e.g. { 'City': 'Lahore', 'Budget': '2.2 Cr' }) */
+  /** Key-value map of all custom columns for this row (e.g. { 'Investor': 'Yes', 'Notes': 'Urgent' }) */
   customFieldValues?: Record<string, string>;
 }
 
@@ -146,7 +153,18 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const companyIdx = findHeaderIndex(headers, ['company', 'organization', 'agency']);
   const tagsIdx = findHeaderIndex(headers, ['tags', 'tag']);
 
-  // Real estate lead fields (for fallback notes/tags)
+  // Real estate lead fields (default columns)
+  const serialIdx = findHeaderIndex(headers, [
+    'sr no',
+    'sr',
+    'srno',
+    'serial',
+    'serial no',
+    'serial_no',
+    's.no',
+    's no',
+    'id',
+  ]);
   const cityIdx = findHeaderIndex(headers, ['city']);
   const areaIdx = findHeaderIndex(headers, ['area', 'location', 'sector', 'phase']);
   const typeIdx = findHeaderIndex(headers, ['property type', 'propertytype', 'type', 'category']);
@@ -154,10 +172,23 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const budgetIdx = findHeaderIndex(headers, ['budget', 'demand', 'price']);
   const investorIdx = findHeaderIndex(headers, ['investor', 'client type', 'lead type']);
   const notesIdx = findHeaderIndex(headers, ['notes', 'note', 'remarks', 'comments', 'detail']);
-  const dateIdx = findHeaderIndex(headers, ['date', 'created date']);
+  const dateIdx = findHeaderIndex(headers, ['date', 'created date', 'date entered', 'created_at']);
 
-  // Any non-base column is considered a custom column
-  const baseIndices = new Set([phoneIdx, nameIdx, emailIdx, companyIdx, tagsIdx]);
+  // Any non-base column is considered a dynamic custom column
+  const baseIndices = new Set([
+    phoneIdx,
+    nameIdx,
+    emailIdx,
+    companyIdx,
+    tagsIdx,
+    serialIdx,
+    cityIdx,
+    areaIdx,
+    typeIdx,
+    sizeIdx,
+    budgetIdx,
+    dateIdx,
+  ]);
   const customColumnIndices: number[] = [];
   for (let idx = 0; idx < rawHeaders.length; idx++) {
     if (!baseIndices.has(idx) && rawHeaders[idx]) {
@@ -235,11 +266,26 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
       }
     }
 
+    let parsedCreatedAt: string | undefined = undefined;
+    if (dateVal) {
+      const d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        parsedCreatedAt = d.toISOString();
+      }
+    }
+
     rows.push({
       phone,
       name: nameIdx >= 0 ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
       email: emailIdx >= 0 ? values[emailIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
       company: companyIdx >= 0 ? values[companyIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      serial_no: serialIdx >= 0 ? values[serialIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      city: cityVal || undefined,
+      area: areaVal || undefined,
+      property_type: typeVal || undefined,
+      size: sizeVal || undefined,
+      budget: budgetVal || undefined,
+      created_at: parsedCreatedAt,
       tagNames: rowTags,
       notes: compiledNotes,
       customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,

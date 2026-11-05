@@ -63,6 +63,7 @@ import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import {
   buildUnifiedContactColumns,
   DEFAULT_CONTACT_COLUMNS_DEF,
+  formatDateCompact,
   type ColumnDefinition,
 } from '@/lib/columns/column-settings';
 import type { AccountColumnSetting } from '@/types';
@@ -689,23 +690,38 @@ export default function ContactsPage() {
                   aria-label={t('selectAllOnPage')}
                 />
               </TableHead>
-              {isColVisible('name') && (
-                <TableHead className="text-muted-foreground">{getColLabel('name', t('tableColumns.name'))}</TableHead>
+              {isColVisible('serial_no') && (
+                <TableHead className="w-20 text-xs text-muted-foreground">{getColLabel('serial_no', 'Sr No')}</TableHead>
               )}
               {isColVisible('phone') && (
-                <TableHead className="text-muted-foreground">{getColLabel('phone', t('tableColumns.phone'))}</TableHead>
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('phone', 'Number')}</TableHead>
               )}
-              {isColVisible('email') && (
-                <TableHead className="text-muted-foreground hidden md:table-cell">{getColLabel('email', t('tableColumns.email'))}</TableHead>
+              {isColVisible('name') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('name', 'Name')}</TableHead>
               )}
-              {isColVisible('company') && (
-                <TableHead className="text-muted-foreground hidden lg:table-cell">{getColLabel('company', t('tableColumns.company'))}</TableHead>
+              {isColVisible('city') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('city', 'City')}</TableHead>
+              )}
+              {isColVisible('area') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('area', 'Area')}</TableHead>
+              )}
+              {isColVisible('property_type') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('property_type', 'Property Type')}</TableHead>
+              )}
+              {isColVisible('size') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('size', 'Size')}</TableHead>
+              )}
+              {isColVisible('budget') && (
+                <TableHead className="text-xs text-muted-foreground">{getColLabel('budget', 'Budget')}</TableHead>
               )}
               {isColVisible('tags') && (
-                <TableHead className="text-muted-foreground hidden md:table-cell">{getColLabel('tags', t('tableColumns.tags'))}</TableHead>
+                <TableHead className="text-muted-foreground text-xs hidden md:table-cell">{getColLabel('tags', t('tableColumns.tags'))}</TableHead>
               )}
-              {isColVisible('created_at') && (
-                <TableHead className="text-muted-foreground hidden lg:table-cell">{getColLabel('created_at', t('tableColumns.createdAt'))}</TableHead>
+              {isColVisible('email') && (
+                <TableHead className="text-muted-foreground text-xs hidden lg:table-cell">{getColLabel('email', t('tableColumns.email'))}</TableHead>
+              )}
+              {isColVisible('company') && (
+                <TableHead className="text-muted-foreground text-xs hidden lg:table-cell">{getColLabel('company', t('tableColumns.company'))}</TableHead>
               )}
               {columns
                 .filter((c) => c.isCustom && c.visible)
@@ -767,26 +783,83 @@ export default function ContactsPage() {
                       aria-label={t('selectContact', { name: contact.name || contact.phone })}
                     />
                   </TableCell>
-                  {isColVisible('name') && (
-                    <TableCell className="text-foreground font-medium">
-                      {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                  {/* Sr No with compact Creation Date (like 30 Sep 2026) */}
+                  {isColVisible('serial_no') && (
+                    <TableCell>
+                      <div className="font-mono text-xs font-semibold text-primary">
+                        {contact.serial_no || '-'}
+                      </div>
+                      {contact.created_at && (
+                        <div className="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
+                          {formatDateCompact(contact.created_at)}
+                        </div>
+                      )}
                     </TableCell>
                   )}
+
+                  {/* Phone / Number */}
                   {isColVisible('phone') && (
-                    <TableCell className="text-muted-foreground font-mono text-xs">
+                    <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">
                       {contact.phone}
                     </TableCell>
                   )}
-                  {isColVisible('email') && (
-                    <TableCell className="text-muted-foreground hidden md:table-cell text-sm">
-                      {contact.email || <span className="text-muted-foreground">-</span>}
+
+                  {/* Name (if serial_no is hidden, show date under name) */}
+                  {isColVisible('name') && (
+                    <TableCell>
+                      <div className="text-foreground font-medium text-sm">
+                        {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                      </div>
+                      {!isColVisible('serial_no') && contact.created_at && (
+                        <div className="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
+                          {formatDateCompact(contact.created_at)}
+                        </div>
+                      )}
                     </TableCell>
                   )}
-                  {isColVisible('company') && (
-                    <TableCell className="text-muted-foreground hidden lg:table-cell text-sm">
-                      {contact.company || <span className="text-muted-foreground">-</span>}
+
+                  {/* City */}
+                  {isColVisible('city') && (
+                    <TableCell className="text-xs text-foreground whitespace-nowrap">
+                      {contact.city || <span className="text-muted-foreground">-</span>}
                     </TableCell>
                   )}
+
+                  {/* Area */}
+                  {isColVisible('area') && (
+                    <TableCell className="text-xs text-foreground">
+                      {contact.area || <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                  )}
+
+                  {/* Property Type */}
+                  {isColVisible('property_type') && (
+                    <TableCell>
+                      {contact.property_type ? (
+                        <Badge variant="outline" className="text-xs bg-muted/60 border-border text-foreground font-normal">
+                          {contact.property_type}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </TableCell>
+                  )}
+
+                  {/* Size */}
+                  {isColVisible('size') && (
+                    <TableCell className="text-xs font-medium text-foreground whitespace-nowrap">
+                      {contact.size || <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                  )}
+
+                  {/* Budget */}
+                  {isColVisible('budget') && (
+                    <TableCell className="text-xs font-semibold text-primary whitespace-nowrap">
+                      {contact.budget || <span className="text-muted-foreground font-normal">-</span>}
+                    </TableCell>
+                  )}
+
+                  {/* Tags */}
                   {isColVisible('tags') && (
                     <TableCell className="hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
@@ -814,13 +887,18 @@ export default function ContactsPage() {
                       </div>
                     </TableCell>
                   )}
-                  {isColVisible('created_at') && (
-                    <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
-                      {new Date(contact.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
+
+                  {/* Email */}
+                  {isColVisible('email') && (
+                    <TableCell className="text-muted-foreground hidden lg:table-cell text-xs">
+                      {contact.email || <span className="text-muted-foreground">-</span>}
+                    </TableCell>
+                  )}
+
+                  {/* Company */}
+                  {isColVisible('company') && (
+                    <TableCell className="text-muted-foreground hidden lg:table-cell text-xs">
+                      {contact.company || <span className="text-muted-foreground">-</span>}
                     </TableCell>
                   )}
                   {columns

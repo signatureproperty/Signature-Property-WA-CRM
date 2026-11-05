@@ -69,6 +69,7 @@ import { CustomColumnManager } from '@/components/common/custom-column-manager';
 import {
   buildUnifiedListingColumns,
   DEFAULT_LISTING_COLUMNS_DEF,
+  formatDateCompact,
 } from '@/lib/columns/column-settings';
 import type { AccountColumnSetting } from '@/types';
 import { useTranslations } from 'next-intl';
@@ -579,10 +580,17 @@ export default function ListingsPage() {
                         setDetailOpen(true);
                       }}
                     >
-                      {/* Serial No */}
+                      {/* Serial No with compact Creation Date */}
                       {isColVisible('serial_no') && (
-                        <TableCell className="font-mono text-xs font-semibold text-primary">
-                          {item.serial_no || '-'}
+                        <TableCell>
+                          <div className="font-mono text-xs font-semibold text-primary">
+                            {item.serial_no || '-'}
+                          </div>
+                          {item.created_at && (
+                            <div className="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
+                              {formatDateCompact(item.created_at)}
+                            </div>
+                          )}
                         </TableCell>
                       )}
 
@@ -592,11 +600,15 @@ export default function ListingsPage() {
                           <div className="font-medium text-foreground text-sm line-clamp-1">
                             {item.title}
                           </div>
-                          {item.address && (
+                          {item.address ? (
                             <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                               {item.address}
                             </div>
-                          )}
+                          ) : !isColVisible('serial_no') && item.created_at ? (
+                            <div className="text-[10px] text-muted-foreground whitespace-nowrap mt-0.5">
+                              {formatDateCompact(item.created_at)}
+                            </div>
+                          ) : null}
                         </TableCell>
                       )}
 

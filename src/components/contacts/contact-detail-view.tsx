@@ -11,6 +11,7 @@ import {
   TemplatePicker,
   type TemplateSendValues,
 } from '@/components/inbox/template-picker';
+import { formatDateCompact } from '@/lib/columns/column-settings';
 import {
   Sheet,
   SheetContent,
@@ -80,10 +81,16 @@ export function ContactDetailView({
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
   // Details tab
+  const [editSerialNo, setEditSerialNo] = useState('');
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editCompany, setEditCompany] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editArea, setEditArea] = useState('');
+  const [editPropertyType, setEditPropertyType] = useState('House');
+  const [editSize, setEditSize] = useState('');
+  const [editBudget, setEditBudget] = useState('');
   const [savingDetails, setSavingDetails] = useState(false);
 
   // Tags tab
@@ -119,10 +126,16 @@ export function ContactDetailView({
 
     if (data) {
       setContact(data);
+      setEditSerialNo(data.serial_no ?? '');
       setEditName(data.name ?? '');
       setEditPhone(data.phone);
       setEditEmail(data.email ?? '');
       setEditCompany(data.company ?? '');
+      setEditCity(data.city ?? '');
+      setEditArea(data.area ?? '');
+      setEditPropertyType(data.property_type ?? 'House');
+      setEditSize(data.size ?? '');
+      setEditBudget(data.budget ?? '');
     }
     setLoading(false);
   }, [contactId, supabase]);
@@ -231,10 +244,16 @@ export function ContactDetailView({
     const { error } = await supabase
       .from('contacts')
       .update({
+        serial_no: editSerialNo.trim() || null,
         name: editName.trim() || null,
         phone: editPhone.trim(),
         email: editEmail.trim() || null,
         company: editCompany.trim() || null,
+        city: editCity.trim() || null,
+        area: editArea.trim() || null,
+        property_type: editPropertyType || null,
+        size: editSize.trim() || null,
+        budget: editBudget.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', contactId);
@@ -422,11 +441,20 @@ export function ContactDetailView({
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <SheetTitle className="text-popover-foreground truncate">
-                    {contact.name || t('unnamed')}
-                  </SheetTitle>
+                  <div className="flex items-center gap-2">
+                    {contact.serial_no && (
+                      <span className="font-mono text-xs font-semibold text-primary px-1.5 py-0.5 rounded bg-primary/10">
+                        {contact.serial_no}
+                      </span>
+                    )}
+                    <SheetTitle className="text-popover-foreground truncate">
+                      {contact.name || t('unnamed')}
+                    </SheetTitle>
+                  </div>
                   <SheetDescription className="text-muted-foreground text-xs mt-0.5">
-                    {t('contactDetailsDesc')}
+                    {contact.created_at
+                      ? `Entered on ${formatDateCompact(contact.created_at)}`
+                      : t('contactDetailsDesc')}
                   </SheetDescription>
                   <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                     <button
@@ -511,44 +539,113 @@ export function ContactDetailView({
               {/* Details Tab */}
               <TabsContent value="details" className="flex-1 overflow-y-auto px-4 py-3">
                 <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-muted-foreground text-xs">{t('name')}</Label>
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="bg-muted border-border text-foreground h-8 text-sm"
-                    />
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Sr No</Label>
+                      <Input
+                        value={editSerialNo}
+                        onChange={(e) => setEditSerialNo(e.target.value)}
+                        placeholder="e.g. C-1"
+                        className="bg-muted border-border font-mono text-foreground h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">
+                        Number / Phone <span className="text-red-400">*</span>
+                      </Label>
+                      <Input
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-muted-foreground text-xs">
-                      {t('phone')} <span className="text-red-400">*</span>
-                    </Label>
-                    <Input
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      className="bg-muted border-border text-foreground h-8 text-sm"
-                    />
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">{t('name')}</Label>
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Budget</Label>
+                      <Input
+                        value={editBudget}
+                        onChange={(e) => setEditBudget(e.target.value)}
+                        placeholder="e.g. 2.5 Cr"
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-muted-foreground text-xs">{t('email')}</Label>
-                    <Input
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      className="bg-muted border-border text-foreground h-8 text-sm"
-                    />
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">City</Label>
+                      <Input
+                        value={editCity}
+                        onChange={(e) => setEditCity(e.target.value)}
+                        placeholder="e.g. Lahore"
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Area</Label>
+                      <Input
+                        value={editArea}
+                        onChange={(e) => setEditArea(e.target.value)}
+                        placeholder="e.g. Samanabad"
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-muted-foreground text-xs">{t('company')}</Label>
-                    <Input
-                      value={editCompany}
-                      onChange={(e) => setEditCompany(e.target.value)}
-                      className="bg-muted border-border text-foreground h-8 text-sm"
-                    />
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Property Type</Label>
+                      <Input
+                        value={editPropertyType}
+                        onChange={(e) => setEditPropertyType(e.target.value)}
+                        placeholder="e.g. House, Plot"
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">Size</Label>
+                      <Input
+                        value={editSize}
+                        onChange={(e) => setEditSize(e.target.value)}
+                        placeholder="e.g. 5 Marla"
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">{t('email')}</Label>
+                      <Input
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-muted-foreground text-xs">{t('company')}</Label>
+                      <Input
+                        value={editCompany}
+                        onChange={(e) => setEditCompany(e.target.value)}
+                        className="bg-muted border-border text-foreground h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
                   <Button
                     onClick={saveDetails}
                     disabled={savingDetails}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground w-full"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground w-full mt-2"
                     size="sm"
                   >
                     {savingDetails ? (

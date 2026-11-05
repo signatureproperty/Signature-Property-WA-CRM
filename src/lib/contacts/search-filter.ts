@@ -34,7 +34,14 @@ export function contactSearchFilter(
   const search = sanitizeContactSearch(rawSearch);
   if (!search) return null;
   const textPattern = escapeLikeUnderscore(search);
-  const conditions = [`name.ilike.*${textPattern}*`];
+  const conditions = [
+    `name.ilike.*${textPattern}*`,
+    `city.ilike.*${textPattern}*`,
+    `area.ilike.*${textPattern}*`,
+    `serial_no.ilike.*${textPattern}*`,
+    `property_type.ilike.*${textPattern}*`,
+    `budget.ilike.*${textPattern}*`,
+  ];
   const digits = phoneSearchDigits(rawSearch);
   if (digits) conditions.push(`phone.ilike.*${digits}*`);
   else if (/\d/.test(search)) conditions.push(`phone.ilike.*${textPattern}*`);

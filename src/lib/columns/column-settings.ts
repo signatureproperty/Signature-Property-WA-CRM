@@ -18,13 +18,24 @@ export const DEFAULT_CONTACT_COLUMNS_DEF: {
   defaultLabel: string;
   fieldType: CustomFieldType;
   required?: boolean;
+  options?: string[];
 }[] = [
+  { id: 'serial_no', defaultLabel: 'Sr No', fieldType: 'text' },
+  { id: 'phone', defaultLabel: 'Number', fieldType: 'text', required: true },
   { id: 'name', defaultLabel: 'Name', fieldType: 'text' },
-  { id: 'phone', defaultLabel: 'Phone', fieldType: 'text', required: true },
+  { id: 'city', defaultLabel: 'City', fieldType: 'text' },
+  { id: 'area', defaultLabel: 'Area', fieldType: 'text' },
+  {
+    id: 'property_type',
+    defaultLabel: 'Property Type',
+    fieldType: 'select',
+    options: ['House', 'Plot', 'Commercial', 'Apartment', 'Agricultural Land', 'Building', 'Other'],
+  },
+  { id: 'size', defaultLabel: 'Size', fieldType: 'text' },
+  { id: 'budget', defaultLabel: 'Budget', fieldType: 'text' },
+  { id: 'tags', defaultLabel: 'Tags', fieldType: 'select' },
   { id: 'email', defaultLabel: 'Email', fieldType: 'text' },
   { id: 'company', defaultLabel: 'Company', fieldType: 'text' },
-  { id: 'tags', defaultLabel: 'Tags', fieldType: 'select' },
-  { id: 'created_at', defaultLabel: 'Created', fieldType: 'date' },
 ];
 
 export const DEFAULT_LISTING_COLUMNS_DEF: {
@@ -68,13 +79,17 @@ export function buildUnifiedContactColumns(
 ): ColumnDefinition[] {
   const settingsMap = new Map(settings.map((s) => [s.column_id, s]));
 
+  // Default secondary columns hidden initially unless toggled
+  const defaultHiddenByDefault = new Set(['email', 'company']);
+
   const defaultCols: ColumnDefinition[] = DEFAULT_CONTACT_COLUMNS_DEF.map((def) => {
     const s = settingsMap.get(def.id);
     const label = s?.label?.trim() || def.defaultLabel;
     const isDeleted = s?.is_deleted ?? false;
+    const initialVisible = !defaultHiddenByDefault.has(def.id);
     const isVis = prevVisibilityMap?.has(def.id)
       ? (prevVisibilityMap.get(def.id) as boolean)
-      : true;
+      : initialVisible;
 
     return {
       id: def.id,
@@ -85,6 +100,7 @@ export function buildUnifiedContactColumns(
       isCustom: false,
       required: def.required,
       fieldType: def.fieldType,
+      options: def.options,
       isDeleted,
     };
   });
@@ -174,4 +190,20 @@ export function buildUnifiedListingColumns(
 
   return [...defaultCols, ...customCols];
 }
+
+/**
+ * Compact date formatter for leads and listings (e.g. "30 Sep 2026").
+ * Displayed subtly in row/card view without needing a wide standalone column.
+ */
+export function formatDateCompact(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 

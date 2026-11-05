@@ -345,6 +345,13 @@ export function ImportModal({
           name: row.name || null,
           email: row.email || null,
           company: row.company || null,
+          serial_no: row.serial_no || null,
+          city: row.city || null,
+          area: row.area || null,
+          property_type: row.property_type || null,
+          size: row.size || null,
+          budget: row.budget || null,
+          ...(row.created_at ? { created_at: row.created_at } : {}),
         }));
 
         const { data, error } = await supabase

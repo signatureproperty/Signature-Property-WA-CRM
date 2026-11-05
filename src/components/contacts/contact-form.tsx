@@ -35,6 +35,19 @@ import {
 import { Loader2, AlertTriangle, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
+const SIZE_UNITS = ['Marla', 'Kanal', 'Sq. Ft.', 'Acre', 'Maraba'] as const;
+type SizeUnit = (typeof SIZE_UNITS)[number];
+
+const PROPERTY_TYPES = [
+  'House',
+  'Plot',
+  'Commercial',
+  'Apartment',
+  'Agricultural Land',
+  'Building',
+  'Other',
+] as const;
+
 interface ContactFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,10 +72,17 @@ export function ContactForm({
   const { accountId, user } = useAuth();
   const isEdit = !!contact;
 
+  const [serialNo, setSerialNo] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
+  const [city, setCity] = useState('Lahore');
+  const [area, setArea] = useState('');
+  const [propertyType, setPropertyType] = useState('House');
+  const [sizeValue, setSizeValue] = useState('');
+  const [sizeUnit, setSizeUnit] = useState<SizeUnit>('Marla');
+  const [budget, setBudget] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Duplicate-phone detection for NEW contacts. `exact` (same digits)
@@ -125,6 +145,43 @@ export function ContactForm({
       setPhone(contact?.phone ?? '');
       setEmail(contact?.email ?? '');
       setCompany(contact?.company ?? '');
+      setCity(contact?.city ?? 'Lahore');
+      setArea(contact?.area ?? '');
+      setPropertyType(contact?.property_type ?? 'House');
+      setBudget(contact?.budget ?? '');
+
+      if (contact?.size) {
+        const match = contact.size.match(/^([\d.]+)\s*(.*)$/);
+        if (match) {
+          setSizeValue(match[1]);
+          const matchedUnit = SIZE_UNITS.find(
+            (u) => u.toLowerCase() === match[2].trim().toLowerCase()
+          );
+          setSizeUnit(matchedUnit || 'Marla');
+        } else {
+          setSizeValue(contact.size);
+          setSizeUnit('Marla');
+        }
+      } else {
+        setSizeValue('');
+        setSizeUnit('Marla');
+      }
+
+      if (contact?.serial_no) {
+        setSerialNo(contact.serial_no);
+      } else if (!contact && accountId) {
+        supabase
+          .from('contacts')
+          .select('*', { count: 'exact', head: true })
+          .eq('account_id', accountId)
+          .then(({ count }) => {
+            const nextNum = (count ?? 0) + 1;
+            setSerialNo(`C-${nextNum}`);
+          });
+      } else {
+        setSerialNo('');
+      }
+
       setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
       setDupMatch(null);
       fetchTags();
@@ -254,15 +311,22 @@ export function ContactForm({
       if (!accountId) throw new Error(t('notLinkedToAccount'));
 
       let contactId = contact?.id;
+      const fullSize = sizeValue.trim() ? `${sizeValue.trim()} ${sizeUnit}` : null;
 
       if (isEdit && contactId) {
         const { error } = await supabase
           .from('contacts')
           .update({
+            serial_no: serialNo.trim() || null,
             name: name.trim() || null,
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            city: city.trim() || null,
+            area: area.trim() || null,
+            property_type: propertyType || null,
+            size: fullSize,
+            budget: budget.trim() || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', contactId);
@@ -273,10 +337,16 @@ export function ContactForm({
           .insert({
             user_id: user.id,
             account_id: accountId,
+            serial_no: serialNo.trim() || null,
             name: name.trim() || null,
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            city: city.trim() || null,
+            area: area.trim() || null,
+            property_type: propertyType || null,
+            size: fullSize,
+            budget: budget.trim() || null,
           })
           .select('id')
           .single();
@@ -345,7 +415,7 @@ export function ContactForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-md">
+      <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-popover-foreground">
             {isEdit ? t('editTitle') : t('addTitle')}
@@ -358,96 +428,223 @@ export function ContactForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cf-name" className="text-muted-foreground">
-              {columnSettings['name']?.label || t('nameLabel')}
-            </Label>
-            <Input
-              id="cf-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('namePlaceholder')}
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cf-phone" className="text-muted-foreground">
-              {columnSettings['phone']?.label || t('phoneLabel')}{' '}
-              <span className="text-red-400">*</span>
-            </Label>
-            <Input
-              id="cf-phone"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (dupMatch) setDupMatch(null);
-              }}
-              onBlur={checkDuplicate}
-              placeholder={t('phonePlaceholder')}
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-            {dupMatch ? (
-              <div
-                className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
-                  dupMatch.exact
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                    : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                }`}
-              >
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <div className="space-y-1">
-                  <p>
-                    {dupMatch.exact
-                      ? t('dupExact')
-                      : t('dupSimilar')}
-                  </p>
-                  {onViewExisting && (
-                    <button
-                      type="button"
-                      onClick={() => onViewExisting(dupMatch.contact.id)}
-                      className="font-medium underline underline-offset-2 hover:no-underline"
-                    >
-                      {t('viewExisting', { name: dupMatch.contact.name || dupMatch.contact.phone })}
-                    </button>
-                  )}
-                </div>
+          {/* Row 1: Sr No (Auto) & Phone (Number) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {!columnSettings['serial_no']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-serial" className="text-muted-foreground text-xs">
+                  {columnSettings['serial_no']?.label || 'Sr No'}
+                </Label>
+                <Input
+                  id="cf-serial"
+                  value={serialNo}
+                  onChange={(e) => setSerialNo(e.target.value)}
+                  placeholder="e.g. C-1"
+                  className="bg-muted border-border font-mono text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('phoneHint')}
-              </p>
             )}
-          </div>
 
-          {!columnSettings['email']?.is_deleted && (
-            <div className="space-y-2">
-              <Label htmlFor="cf-email" className="text-muted-foreground">
-                {columnSettings['email']?.label || t('emailLabel')}
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-phone" className="text-muted-foreground text-xs">
+                {columnSettings['phone']?.label || 'Number / Phone'}{' '}
+                <span className="text-red-400">*</span>
               </Label>
               <Input
-                id="cf-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={t('emailPlaceholder')}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                id="cf-phone"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (dupMatch) setDupMatch(null);
+                }}
+                onBlur={checkDuplicate}
+                placeholder={t('phonePlaceholder')}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
               />
+            </div>
+          </div>
+
+          {dupMatch && (
+            <div
+              className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
+                dupMatch.exact
+                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                  : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              }`}
+            >
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <div className="space-y-1">
+                <p>
+                  {dupMatch.exact
+                    ? t('dupExact')
+                    : t('dupSimilar')}
+                </p>
+                {onViewExisting && (
+                  <button
+                    type="button"
+                    onClick={() => onViewExisting(dupMatch.contact.id)}
+                    className="font-medium underline underline-offset-2 hover:no-underline"
+                  >
+                    {t('viewExisting', { name: dupMatch.contact.name || dupMatch.contact.phone })}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
-          {!columnSettings['company']?.is_deleted && (
-            <div className="space-y-2">
-              <Label htmlFor="cf-company" className="text-muted-foreground">
-                {columnSettings['company']?.label || t('companyLabel')}
+          {/* Row 2: Name & Budget */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-name" className="text-muted-foreground text-xs">
+                {columnSettings['name']?.label || t('nameLabel')}
               </Label>
               <Input
-                id="cf-company"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder={t('companyPlaceholder')}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                id="cf-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('namePlaceholder')}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
               />
+            </div>
+
+            {!columnSettings['budget']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-budget" className="text-muted-foreground text-xs">
+                  {columnSettings['budget']?.label || 'Budget'}
+                </Label>
+                <Input
+                  id="cf-budget"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  placeholder="e.g. 2.5 Cr / 80 Lac"
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Row 3: City & Area */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {!columnSettings['city']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-city" className="text-muted-foreground text-xs">
+                  {columnSettings['city']?.label || 'City'}
+                </Label>
+                <Input
+                  id="cf-city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="e.g. Lahore, Islamabad"
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
+              </div>
+            )}
+
+            {!columnSettings['area']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-area" className="text-muted-foreground text-xs">
+                  {columnSettings['area']?.label || 'Area'}
+                </Label>
+                <Input
+                  id="cf-area"
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  placeholder="e.g. Samanabad, DHA Phase 5"
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Row 4: Property Type & Size with Unit */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {!columnSettings['property_type']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs">
+                  {columnSettings['property_type']?.label || 'Property Type'}
+                </Label>
+                <Select value={propertyType} onValueChange={(val) => setPropertyType(val ?? 'House')}>
+                  <SelectTrigger className="bg-muted border-border text-xs text-foreground h-9 w-full">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROPERTY_TYPES.map((pt) => (
+                      <SelectItem key={pt} value={pt} className="text-xs">
+                        {pt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {!columnSettings['size']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground text-xs">
+                  {columnSettings['size']?.label || 'Size'}
+                </Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={sizeValue}
+                    onChange={(e) => setSizeValue(e.target.value)}
+                    placeholder="e.g. 5, 10, 1"
+                    className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground flex-1 h-9"
+                  />
+                  <Select
+                    value={sizeUnit}
+                    onValueChange={(val) => {
+                      if (val) setSizeUnit(val as SizeUnit);
+                    }}
+                  >
+                    <SelectTrigger className="w-[100px] bg-muted border-border text-xs text-foreground h-9 shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SIZE_UNITS.map((unit) => (
+                        <SelectItem key={unit} value={unit} className="text-xs">
+                          {unit}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Optional: Email & Company */}
+          {(!columnSettings['email']?.is_deleted || !columnSettings['company']?.is_deleted) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {!columnSettings['email']?.is_deleted && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cf-email" className="text-muted-foreground text-xs">
+                    {columnSettings['email']?.label || t('emailLabel')}
+                  </Label>
+                  <Input
+                    id="cf-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={t('emailPlaceholder')}
+                    className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                  />
+                </div>
+              )}
+
+              {!columnSettings['company']?.is_deleted && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cf-company" className="text-muted-foreground text-xs">
+                    {columnSettings['company']?.label || t('companyLabel')}
+                  </Label>
+                  <Input
+                    id="cf-company"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    placeholder={t('companyPlaceholder')}
+                    className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                  />
+                </div>
+              )}
             </div>
           )}
 

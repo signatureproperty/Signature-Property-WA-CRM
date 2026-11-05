@@ -107,21 +107,18 @@ describe('parseContactCsv', () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].phone).toBe('+923278572797');
     expect(result.rows[0].name).toBe('Farooq');
+    expect(result.rows[0].city).toBe('Lahore');
+    expect(result.rows[0].area).toBe('Samanabad');
+    expect(result.rows[0].property_type).toBe('House');
+    expect(result.rows[0].size).toBe('7.5 Marla');
+    expect(result.rows[0].budget).toBe('2.2 Cr');
     expect(result.rows[0].tagNames).toEqual(['Lahore', 'Samanabad', 'House', 'Investor']);
     expect(result.rows[0].notes).toContain('City: Lahore');
     expect(result.rows[0].notes).toContain('Budget: 2.2 Cr');
     expect(result.rows[0].notes).toContain('Notes: Near Chirag Market');
     expect(result.discoveredCustomColumns.map((c) => c.name)).toEqual([
-      'Date',
-      'City',
-      'Area',
-      'Property Type',
-      'Size',
-      'Budget',
       'Investor',
       'Notes',
     ]);
-    expect(result.rows[0].customFieldValues?.City).toBe('Lahore');
-    expect(result.rows[0].customFieldValues?.Budget).toBe('2.2 Cr');
   });
 });

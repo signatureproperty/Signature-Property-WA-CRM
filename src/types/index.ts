@@ -119,6 +119,12 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  serial_no?: string | null;
+  city?: string | null;
+  area?: string | null;
+  property_type?: string | null;
+  size?: string | null;
+  budget?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
