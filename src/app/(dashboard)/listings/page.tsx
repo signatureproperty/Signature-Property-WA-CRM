@@ -20,6 +20,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
@@ -329,7 +330,9 @@ export default function ListingsPage() {
                 }
               />
               <DropdownMenuContent align="end" className="w-52 border-border bg-popover text-popover-foreground">
-                <DropdownMenuLabel className="text-xs">Toggle Columns</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="text-xs">Toggle Columns</DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 {columns.map((col) => (
                   <DropdownMenuCheckboxItem
