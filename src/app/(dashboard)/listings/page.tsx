@@ -280,21 +280,14 @@ export default function ListingsPage() {
       {/* PAGE HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
-              <Building2 className="size-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {t('title')}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {listings.length > 0
-                  ? t('subtitle', { count: listings.length })
-                  : t('subtitleZero')}
-              </p>
-            </div>
-          </div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {t('title')}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {listings.length > 0
+              ? t('subtitle', { count: listings.length })
+              : t('subtitleZero')}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -329,13 +322,13 @@ export default function ListingsPage() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs">
-                    <SlidersHorizontal className="size-3.5" />
+                  <Button variant="outline" className="border-border text-muted-foreground hover:bg-muted">
+                    <SlidersHorizontal className="size-4" />
                     {t('customizeColumns')}
                   </Button>
                 }
               />
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-52 border-border bg-popover text-popover-foreground">
                 <DropdownMenuLabel className="text-xs">Toggle Columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {columns.map((col) => (
@@ -358,7 +351,7 @@ export default function ListingsPage() {
               setSelectedListing(null);
               setFormOpen(true);
             }}
-            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground h-9"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
           >
             <Plus className="size-4" />
             {t('addListingBtn')}
@@ -367,22 +360,22 @@ export default function ListingsPage() {
       </div>
 
       {/* SEARCH & FILTERS BAR */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+      <div className="flex flex-col sm:flex-row gap-2 items-center">
         {/* Search Input */}
-        <div className="relative sm:col-span-5">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <div className="relative w-full sm:w-72 md:w-80">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-card border-border text-sm"
+            className="pl-9 bg-muted border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
 
         {/* Status Filter */}
-        <div className="sm:col-span-2">
+        <div className="w-full sm:w-36">
           <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val ?? 'all')}>
-            <SelectTrigger className="bg-card border-border text-sm">
+            <SelectTrigger className="w-full bg-muted border-border text-foreground">
               <SelectValue placeholder={t('filterAllStatus')} />
             </SelectTrigger>
             <SelectContent>
@@ -394,9 +387,9 @@ export default function ListingsPage() {
         </div>
 
         {/* Property Type Filter */}
-        <div className="sm:col-span-3">
+        <div className="w-full sm:w-44">
           <Select value={typeFilter} onValueChange={(val) => setTypeFilter(val ?? 'all')}>
-            <SelectTrigger className="bg-card border-border text-sm">
+            <SelectTrigger className="w-full bg-muted border-border text-foreground">
               <SelectValue placeholder={t('filterAllTypes')} />
             </SelectTrigger>
             <SelectContent>
@@ -411,9 +404,9 @@ export default function ListingsPage() {
         </div>
 
         {/* City Filter */}
-        <div className="sm:col-span-2">
+        <div className="w-full sm:w-36">
           <Select value={cityFilter} onValueChange={(val) => setCityFilter(val ?? 'all')}>
-            <SelectTrigger className="bg-card border-border text-sm">
+            <SelectTrigger className="w-full bg-muted border-border text-foreground">
               <SelectValue placeholder={t('allCities')} />
             </SelectTrigger>
             <SelectContent>
