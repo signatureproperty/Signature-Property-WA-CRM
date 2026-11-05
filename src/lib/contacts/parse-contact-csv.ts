@@ -1,6 +1,8 @@
 /**
  * CSV parsing for the contacts import modal. Shared + unit-tested so
  * tag-column handling stays aligned with phone/name/email/company.
+ * Enhanced to support Real Estate sheets (Number, Name, City, Area,
+ * Property Type, Size, Budget, Investor, Notes).
  */
 
 export interface ParsedContactRow {
@@ -8,8 +10,10 @@ export interface ParsedContactRow {
   name?: string;
   email?: string;
   company?: string;
-  /** Tag names from the optional `tags` column (comma/semicolon separated). */
+  /** Tag names from the optional `tags` column or auto-derived from Real Estate columns. */
   tagNames: string[];
+  /** Consolidated lead notes from Real Estate fields. */
+  notes?: string;
 }
 
 /** Split a CSV cell into unique tag names (case-insensitive de-dupe). */
@@ -31,19 +35,56 @@ export function parseTagCell(value: string | undefined): string[] {
   return names;
 }
 
+/**
+ * Normalizes phone numbers for import:
+ * - Tolerates local Pakistani formats (0300... or 300... -> +92300...)
+ * - Prepending + when appropriate so international validator accepts it
+ */
+export function normalizePhoneForImport(raw: string): string {
+  let val = raw.trim().replace(/["']/g, '');
+  if (!val) return '';
+  if (val.startsWith('+')) {
+    return '+' + val.slice(1).replace(/\D/g, '');
+  }
+  const digits = val.replace(/\D/g, '');
+  if (!digits) return '';
+
+  // Pakistani 11-digit mobile (e.g. 03278572797 -> +923278572797)
+  if (digits.length === 11 && digits.startsWith('03')) {
+    return '+92' + digits.slice(1);
+  }
+  // Pakistani 10-digit mobile without leading 0 (e.g. 3278572797 -> +923278572797)
+  if (digits.length === 10 && digits.startsWith('3')) {
+    return '+92' + digits;
+  }
+  // Pakistani 12-digit with 92 prefix (e.g. 923278572797 -> +923278572797)
+  if (digits.length === 12 && digits.startsWith('923')) {
+    return '+' + digits;
+  }
+  // Standard 10-15 digit phone with no trunk 0 (e.g. 14155551212)
+  if (digits.length >= 8 && digits.length <= 15 && !digits.startsWith('0')) {
+    return '+' + digits;
+  }
+
+  return val;
+}
+
 export interface ParseContactCsvResult {
   rows: ParsedContactRow[];
-  /**
-   * True when the CSV header includes the required `phone` column.
-   * `rows` is empty both when the column is missing and when the file
-   * simply has no usable data rows; callers that need to tell those
-   * apart (to pick the right error message) read this flag.
-   */
+  /** True when the CSV header includes a recognized phone/number column. */
   hasPhoneColumn: boolean;
-  /** True when the CSV header includes a `tags` column. */
+  /** True when the CSV header includes a `tags` column or Real Estate tagging columns. */
   hasTagsColumn: boolean;
   /** True when the CSV header includes a `company` column. */
   hasCompanyColumn: boolean;
+}
+
+function normalizeHeaderName(name: string): string {
+  return name.trim().toLowerCase().replace(/["']/g, '').replace(/[_\s]+/g, ' ');
+}
+
+function findHeaderIndex(headers: string[], synonyms: string[]): number {
+  return headers.findIndex((h) => synonyms.includes(normalizeHeaderName(h)));
 }
 
 export function parseContactCsv(text: string): ParseContactCsvResult {
@@ -57,11 +98,26 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     };
   }
 
-  const headers = lines[0]
-    .split(',')
-    .map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
+  const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
+  const rawHeaders = parseCsvLine(lines[0], delimiter);
+  const headers = rawHeaders.map(normalizeHeaderName);
 
-  const phoneIdx = headers.indexOf('phone');
+  // Phone column synonyms
+  const phoneIdx = findHeaderIndex(headers, [
+    'phone',
+    'number',
+    'phone number',
+    'phonenumber',
+    'mobile',
+    'mobile number',
+    'contact',
+    'contact number',
+    'cell',
+    'whatsapp',
+    'wa',
+    'ph',
+  ]);
+
   if (phoneIdx === -1) {
     return {
       rows: [],
@@ -71,10 +127,28 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     };
   }
 
-  const nameIdx = headers.indexOf('name');
-  const emailIdx = headers.indexOf('email');
-  const companyIdx = headers.indexOf('company');
-  const tagsIdx = headers.indexOf('tags');
+  const nameIdx = findHeaderIndex(headers, [
+    'name',
+    'customer name',
+    'client name',
+    'full name',
+    'buyer name',
+    'buyer',
+    'lead name',
+  ]);
+  const emailIdx = findHeaderIndex(headers, ['email', 'e mail', 'email address']);
+  const companyIdx = findHeaderIndex(headers, ['company', 'organization', 'agency']);
+  const tagsIdx = findHeaderIndex(headers, ['tags', 'tag']);
+
+  // Real estate lead fields
+  const cityIdx = findHeaderIndex(headers, ['city']);
+  const areaIdx = findHeaderIndex(headers, ['area', 'location', 'sector', 'phase']);
+  const typeIdx = findHeaderIndex(headers, ['property type', 'propertytype', 'type', 'category']);
+  const sizeIdx = findHeaderIndex(headers, ['size', 'area size', 'plot size']);
+  const budgetIdx = findHeaderIndex(headers, ['budget', 'demand', 'price']);
+  const investorIdx = findHeaderIndex(headers, ['investor', 'client type', 'lead type']);
+  const notesIdx = findHeaderIndex(headers, ['notes', 'note', 'remarks', 'comments', 'detail']);
+  const dateIdx = findHeaderIndex(headers, ['date', 'created date']);
 
   const rows: ParsedContactRow[] = [];
 
@@ -82,52 +156,89 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const values = parseCsvLine(line);
-    // A row with no usable phone is pushed through rather than dropped
-    // here — dedupeByPhone (shared with the webhook/manual-form paths)
-    // already treats an empty normalized key as invalid, and counting
-    // it there means the import result can tell the user "N contacts
-    // had no phone" instead of the row just vanishing with the total
-    // row count silently short of what's actually in the file.
-    const phone = values[phoneIdx]?.replace(/["']/g, '').trim() ?? '';
+    const values = parseCsvLine(line, delimiter);
+    const rawPhone = values[phoneIdx]?.replace(/["']/g, '').trim() ?? '';
+    const phone = normalizePhoneForImport(rawPhone);
+
+    const rowTags: string[] = [];
+    if (tagsIdx >= 0) {
+      rowTags.push(...parseTagCell(values[tagsIdx]?.replace(/["']/g, '')));
+    }
+
+    // Auto-generate tags from Real Estate fields if present
+    const cityVal = cityIdx >= 0 ? values[cityIdx]?.replace(/["']/g, '').trim() : '';
+    const areaVal = areaIdx >= 0 ? values[areaIdx]?.replace(/["']/g, '').trim() : '';
+    const typeVal = typeIdx >= 0 ? values[typeIdx]?.replace(/["']/g, '').trim() : '';
+    const sizeVal = sizeIdx >= 0 ? values[sizeIdx]?.replace(/["']/g, '').trim() : '';
+    const budgetVal = budgetIdx >= 0 ? values[budgetIdx]?.replace(/["']/g, '').trim() : '';
+    const investorVal = investorIdx >= 0 ? values[investorIdx]?.replace(/["']/g, '').trim() : '';
+    const userNotes = notesIdx >= 0 ? values[notesIdx]?.replace(/["']/g, '').trim() : '';
+    const dateVal = dateIdx >= 0 ? values[dateIdx]?.replace(/["']/g, '').trim() : '';
+
+    if (cityVal && !rowTags.map((t) => t.toLowerCase()).includes(cityVal.toLowerCase())) {
+      rowTags.push(cityVal);
+    }
+    if (areaVal && !rowTags.map((t) => t.toLowerCase()).includes(areaVal.toLowerCase())) {
+      rowTags.push(areaVal);
+    }
+    if (typeVal && !rowTags.map((t) => t.toLowerCase()).includes(typeVal.toLowerCase())) {
+      rowTags.push(typeVal);
+    }
+    if (investorVal && (investorVal.toLowerCase() === 'yes' || investorVal.toLowerCase() === 'investor')) {
+      if (!rowTags.map((t) => t.toLowerCase()).includes('investor')) {
+        rowTags.push('Investor');
+      }
+    }
+
+    // Compile notes
+    const noteSegments: string[] = [];
+    if (dateVal) noteSegments.push(`Date: ${dateVal}`);
+    if (cityVal) noteSegments.push(`City: ${cityVal}`);
+    if (areaVal) noteSegments.push(`Area: ${areaVal}`);
+    if (typeVal) noteSegments.push(`Property Type: ${typeVal}`);
+    if (sizeVal) noteSegments.push(`Size: ${sizeVal}`);
+    if (budgetVal) noteSegments.push(`Budget: ${budgetVal}`);
+    if (investorVal) noteSegments.push(`Investor: ${investorVal}`);
+    if (userNotes) noteSegments.push(`Notes: ${userNotes}`);
+
+    const compiledNotes = noteSegments.length > 0 ? noteSegments.join(' | ') : undefined;
 
     rows.push({
       phone,
-      name:
-        nameIdx >= 0
-          ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined
-          : undefined,
-      email:
-        emailIdx >= 0
-          ? values[emailIdx]?.replace(/["']/g, '').trim() || undefined
-          : undefined,
-      company:
-        companyIdx >= 0
-          ? values[companyIdx]?.replace(/["']/g, '').trim() || undefined
-          : undefined,
-      tagNames:
-        tagsIdx >= 0 ? parseTagCell(values[tagsIdx]?.replace(/["']/g, '')) : [],
+      name: nameIdx >= 0 ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      email: emailIdx >= 0 ? values[emailIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      company: companyIdx >= 0 ? values[companyIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      tagNames: rowTags,
+      notes: compiledNotes,
     });
   }
+
+  const hasTags = tagsIdx >= 0 || cityIdx >= 0 || areaIdx >= 0 || typeIdx >= 0 || investorIdx >= 0;
 
   return {
     rows,
     hasPhoneColumn: true,
-    hasTagsColumn: tagsIdx >= 0,
+    hasTagsColumn: hasTags,
     hasCompanyColumn: companyIdx >= 0,
   };
 }
 
-/** Simple CSV line parse (handles quoted fields). */
-function parseCsvLine(line: string): string[] {
+/** Simple CSV line parse (handles quoted fields and custom delimiters). */
+export function parseCsvLine(line: string, delimiter = ','): string[] {
   const values: string[] = [];
   let current = '';
   let inQuotes = false;
 
-  for (const char of line) {
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
     if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
       values.push(current.trim());
       current = '';
     } else {

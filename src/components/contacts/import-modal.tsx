@@ -274,6 +274,7 @@ export function ImportModal({
       }
 
       const tagAssignments: ContactTagAssignment[] = [];
+      const noteInserts: { contact_id: string; user_id: string; note_text: string }[] = [];
 
       // 4) Batch insert the genuinely-new rows in chunks of 50. The DB
       //    unique index is the backstop: a 23505 (race, or a format
@@ -316,14 +317,17 @@ export function ImportModal({
                   tagNames: source.tagNames,
                 });
               }
+              if (source.notes) {
+                noteInserts.push({
+                  contact_id: singleData.id,
+                  user_id: user.id,
+                  note_text: source.notes,
+                });
+              }
             } else if (isUniqueViolation(singleErr)) {
               skipped++;
             } else {
               failed++;
-              // Keep the actual DB error instead of discarding it —
-              // "N contacts failed" with no reason attached left no
-              // way to tell an RLS/constraint failure from a fluke,
-              // let alone which contact it was.
               console.error(
                 '[contacts import] insert failed for',
                 row.phone,
@@ -341,22 +345,27 @@ export function ImportModal({
         } else {
           const inserted = data ?? [];
           imported += inserted.length;
-          // inserted[j] ↔ chunk[j] only holds because a single INSERT
-          // preserves RETURNING order. If this path is ever split into
-          // parallel inserts, zip by phone or returned id instead.
           for (let j = 0; j < inserted.length; j++) {
             const source = chunk[j];
-            if (!source || source.tagNames.length === 0) continue;
-            tagAssignments.push({
-              contactId: inserted[j].id,
-              tagNames: source.tagNames,
-            });
+            if (!source) continue;
+            if (source.tagNames.length > 0) {
+              tagAssignments.push({
+                contactId: inserted[j].id,
+                tagNames: source.tagNames,
+              });
+            }
+            if (source.notes) {
+              noteInserts.push({
+                contact_id: inserted[j].id,
+                user_id: user.id,
+                note_text: source.notes,
+              });
+            }
           }
         }
       }
 
-      // 5) Wire tags onto the contacts we just created. Failure here must
-      //    not mask a successful contact import.
+      // 5) Wire tags onto the contacts we just created.
       let tagsAssigned = 0;
       try {
         tagsAssigned = await assignImportedContactTags(
@@ -366,6 +375,15 @@ export function ImportModal({
         );
       } catch {
         toast.warning(t('toastTagsWarning'));
+      }
+
+      // 6) Save real estate notes and details if present
+      if (noteInserts.length > 0) {
+        try {
+          await supabase.from('contact_notes').insert(noteInserts);
+        } catch (err) {
+          console.error('[contacts import] failed to save contact notes:', err);
+        }
       }
 
       setResult({

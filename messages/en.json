@@ -547,6 +547,11 @@
       "statusRented": "Rented",
       "filterAllTypes": "All Property Types",
       "allCities": "All Cities",
+      "importBtn": "Import",
+      "loading": "Loading property listings...",
+      "noListingsYet": "No property listings yet.",
+      "noListingsMatch": "No property listings match your filters.",
+      "addFirstListing": "Add your first property",
       "noListingsFound": "No property listings found.",
       "noListingsDesc": "Start by adding your first property or plot listing.",
       "viewModeTable": "Table view",
@@ -625,6 +630,24 @@
       "markAsSold": "Mark as Sold",
       "markAsAvailable": "Mark as Available",
       "statusUpdated": "Status updated successfully"
+    },
+    "importModal": {
+      "title": "Import Property Listings",
+      "desc": "Upload a CSV or Sheet export with property columns (Sr No, Number, City, Area, Address, Property Type, Size, Demand, Status, etc.).",
+      "uploadDropzone": "Click to choose a CSV file",
+      "uploadHint": ".csv up to your browser limit",
+      "rowsReady": "{count, plural, =1 {1 listing ready} other {# listings ready}}",
+      "preview": "Preview · first {count}",
+      "moreRows": "+ {count, plural, =1 {1 more listing not shown} other {# more listings not shown}}",
+      "importComplete": "Import complete",
+      "resultImported": "{count, plural, =1 {1 listing imported} other {# listings imported}}",
+      "resultFailed": "{count, plural, =1 {1 failed} other {# failed}}",
+      "importBtn": "Import {count, plural, =1 {1 listing} other {# listings}}",
+      "cancel": "Cancel",
+      "close": "Close",
+      "toastNoValidRows": "No valid listing rows found in CSV.",
+      "toastImported": "{count, plural, =1 {1 listing imported successfully} other {# listings imported successfully}}",
+      "toastFailed": "Failed to import property listings."
     }
   },
   "Contacts": {
@@ -777,7 +800,7 @@
     },
     "importModal": {
       "title": "Import Contacts",
-      "desc": "Upload a CSV with a required <phoneCode>phone</phoneCode> column. Optional: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (comma-separated; quote multi-tag cells).",
+      "desc": "Upload a CSV with a required <phoneCode>phone</phoneCode> or number column. Supports Real Estate data. Optional: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (comma-separated; quote multi-tag cells).",
       "uploadDropzone": "Click to choose a CSV file",
       "uploadHint": ".csv up to your browser limit",
       "rowsReady": "{count} row ready",

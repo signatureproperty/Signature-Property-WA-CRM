@@ -59,9 +59,11 @@ import {
   SlidersHorizontal,
   Loader2,
   CheckCircle2,
+  Upload,
 } from 'lucide-react';
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingDetailView } from '@/components/listings/listing-detail-view';
+import { ListingImportModal } from '@/components/listings/listing-import-modal';
 import { useTranslations } from 'next-intl';
 
 const STATUS_BADGES: Record<
@@ -129,6 +131,7 @@ export default function ListingsPage() {
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailListing, setDetailListing] = useState<PropertyListing | null>(null);
@@ -226,6 +229,10 @@ export default function ListingsPage() {
       return true;
     });
   }, [listings, search, statusFilter, typeFilter, cityFilter]);
+
+  const hasActiveFilters = Boolean(
+    search || statusFilter !== 'all' || typeFilter !== 'all' || cityFilter !== 'all'
+  );
 
   async function handleQuickStatusChange(listingId: string, newStatus: PropertyListingStatus) {
     try {
@@ -348,6 +355,16 @@ export default function ListingsPage() {
             </DropdownMenu>
           )}
 
+          {/* IMPORT BUTTON */}
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <Upload className="size-4" />
+            {t('importBtn')}
+          </Button>
+
           {/* ADD PROPERTY BUTTON */}
           <Button
             onClick={() => {
@@ -425,72 +442,80 @@ export default function ListingsPage() {
       </div>
 
       {/* CONTENT LISTINGS */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-12 border rounded-xl border-border bg-card">
-          <Loader2 className="size-7 animate-spin text-primary mb-2" />
-          <p className="text-sm text-muted-foreground">Loading property listings...</p>
-        </div>
-      ) : filteredListings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl border-dashed border-border bg-card">
-          <div className="p-3 rounded-full bg-muted/60 mb-3 text-muted-foreground">
-            <Building2 className="size-8" />
-          </div>
-          <h3 className="font-semibold text-lg text-foreground">{t('noListingsFound')}</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-            {t('noListingsDesc')}
-          </p>
-          <Button
-            onClick={() => {
-              setSelectedListing(null);
-              setFormOpen(true);
-            }}
-            variant="outline"
-            size="sm"
-            className="mt-4 gap-1.5"
-          >
-            <Plus className="size-4" />
-            {t('addListingBtn')}
-          </Button>
-        </div>
-      ) : viewMode === 'table' ? (
+      {viewMode === 'table' ? (
         /* TABLE VIEW */
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="rounded-lg border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
                   {isColVisible('serial_no') && (
-                    <TableHead className="w-20 text-xs">Sr No</TableHead>
+                    <TableHead className="w-20 text-xs text-muted-foreground">Sr No</TableHead>
                   )}
-                  {isColVisible('title') && <TableHead className="text-xs">Title & Details</TableHead>}
+                  {isColVisible('title') && <TableHead className="text-xs text-muted-foreground">Title & Details</TableHead>}
                   {isColVisible('property_type') && (
-                    <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Type</TableHead>
                   )}
-                  {isColVisible('size') && <TableHead className="text-xs">Size</TableHead>}
+                  {isColVisible('size') && <TableHead className="text-xs text-muted-foreground">Size</TableHead>}
                   {isColVisible('demand_price') && (
-                    <TableHead className="text-xs">Demand</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Demand</TableHead>
                   )}
-                  {isColVisible('status') && <TableHead className="text-xs">Status</TableHead>}
+                  {isColVisible('status') && <TableHead className="text-xs text-muted-foreground">Status</TableHead>}
                   {isColVisible('area_city') && (
-                    <TableHead className="text-xs">City & Area</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">City & Area</TableHead>
                   )}
                   {isColVisible('potential_rent') && (
-                    <TableHead className="text-xs">Potential Rent</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Potential Rent</TableHead>
                   )}
                   {isColVisible('dimensions') && (
-                    <TableHead className="text-xs">Dimensions</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Dimensions</TableHead>
                   )}
                   {isColVisible('contact_number') && (
-                    <TableHead className="text-xs">Phone</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Phone</TableHead>
                   )}
                   {isColVisible('documents') && (
-                    <TableHead className="text-xs">Documents</TableHead>
+                    <TableHead className="text-xs text-muted-foreground">Documents</TableHead>
                   )}
-                  <TableHead className="w-12 text-right text-xs">Actions</TableHead>
+                  <TableHead className="w-12 text-right text-xs text-muted-foreground" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredListings.map((item) => {
+                {loading ? (
+                  <TableRow className="border-border">
+                    <TableCell colSpan={columns.filter((c) => c.visible).length + 1} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="size-6 animate-spin text-primary" />
+                        <p className="text-sm text-muted-foreground">{t('loading')}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredListings.length === 0 ? (
+                  <TableRow className="border-border">
+                    <TableCell colSpan={columns.filter((c) => c.visible).length + 1} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <Building2 className="size-8 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          {hasActiveFilters ? t('noListingsMatch') : t('noListingsYet')}
+                        </p>
+                        {!hasActiveFilters && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedListing(null);
+                              setFormOpen(true);
+                            }}
+                            className="mt-2 border-border text-muted-foreground hover:bg-muted"
+                          >
+                            <Plus className="size-3.5" />
+                            {t('addFirstListing')}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredListings.map((item) => {
                   const statusInfo =
                     STATUS_BADGES[item.status] || STATUS_BADGES.available;
                   return (
@@ -668,9 +693,40 @@ export default function ListingsPage() {
                       </TableCell>
                     </TableRow>
                   );
-                })}
+                })
+              )}
               </TableBody>
             </Table>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="rounded-lg border border-border p-12 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="size-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">{t('loading')}</p>
+          </div>
+        </div>
+      ) : filteredListings.length === 0 ? (
+        <div className="rounded-lg border border-border p-12 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <Building2 className="size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              {hasActiveFilters ? t('noListingsMatch') : t('noListingsYet')}
+            </p>
+            {!hasActiveFilters && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedListing(null);
+                  setFormOpen(true);
+                }}
+                className="mt-2 border-border text-muted-foreground hover:bg-muted"
+              >
+                <Plus className="size-3.5" />
+                {t('addFirstListing')}
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -862,6 +918,14 @@ export default function ListingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* IMPORT MODAL */}
+      <ListingImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={fetchListings}
+        existingCount={listings.length}
+      />
     </div>
   );
 }
