@@ -51,3 +51,4 @@ describe('formatDateCompact', () => {
     expect(formatted).toMatch(/30\s+Sept?\s+2026/i);
   });
 });
+
