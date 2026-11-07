@@ -51,6 +51,8 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   SlidersHorizontal,
   Columns3,
   Filter,
@@ -75,6 +77,7 @@ import {
   buildUnifiedContactColumns,
   DEFAULT_CONTACT_COLUMNS_DEF,
   formatDateCompact,
+  compareSerials,
   type ColumnDefinition,
 } from '@/lib/columns/column-settings';
 import type { AccountColumnSetting } from '@/types';
@@ -127,6 +130,18 @@ export default function ContactsPage() {
   // Real Estate Filters (Property Type, City, Area, Price, Size, Tags)
   const [filters, setFilters] = useState<RealEstateFilters>(INITIAL_FILTERS);
   const selectedTagIds = filters.tagIds;
+
+  // Serial Sorting: 'asc' = 1 to forward; 'desc' = reverse
+  const [serialSortDirection, setSerialSortDirection] = useState<'asc' | 'desc'>('asc');
+  const toggleSerialSort = () => {
+    setSerialSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  const sortedContacts = useMemo(() => {
+    const list = [...contacts];
+    list.sort((a, b) => compareSerials(a.serial_no, b.serial_no, serialSortDirection));
+    return list;
+  }, [contacts, serialSortDirection]);
 
   // Columns & Custom Fields
   const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_CONTACT_COLUMNS);
@@ -651,7 +666,36 @@ export default function ContactsPage() {
                 />
               </TableHead>
               {isColVisible('serial_no') && (
-                <TableHead className="w-20 text-xs text-muted-foreground">{getColLabel('serial_no', 'Sr No')}</TableHead>
+                <TableHead className="w-24 text-xs text-muted-foreground select-none">
+                  <button
+                    type="button"
+                    onClick={toggleSerialSort}
+                    className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors group font-semibold text-xs py-1 cursor-pointer"
+                    title={
+                      serialSortDirection === 'asc'
+                        ? 'Sorted 1 to forward (click for reverse)'
+                        : 'Sorted reverse (click for 1 forward)'
+                    }
+                  >
+                    <span>{getColLabel('serial_no', 'Sr No')}</span>
+                    <span className="inline-flex flex-col -space-y-1">
+                      <ChevronUp
+                        className={`size-3 transition-colors ${
+                          serialSortDirection === 'asc'
+                            ? 'text-primary font-bold'
+                            : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                        }`}
+                      />
+                      <ChevronDown
+                        className={`size-3 transition-colors ${
+                          serialSortDirection === 'desc'
+                            ? 'text-primary font-bold'
+                            : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </TableHead>
               )}
               {isColVisible('phone') && (
                 <TableHead className="text-xs text-muted-foreground">{getColLabel('phone', 'Number')}</TableHead>
@@ -733,7 +777,7 @@ export default function ContactsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              contacts.map((contact) => (
+              sortedContacts.map((contact) => (
                 <TableRow
                   key={contact.id}
                   className="border-border hover:bg-muted/50 cursor-pointer"

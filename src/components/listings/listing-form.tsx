@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, Sparkles, Building2 } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface ListingFormProps {
@@ -69,7 +69,7 @@ export function ListingForm({
 
   const [saving, setSaving] = useState(false);
 
-  // Auto-calculated Serial No (e.g. L-1, L-2)
+  // Editable Serial No (e.g. P-1, L-1)
   const [serialNo, setSerialNo] = useState('');
 
   // Primary Fields
@@ -105,7 +105,9 @@ export function ListingForm({
   // Custom Fields (Dynamic Columns) & Column Settings
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
-  const [columnSettings, setColumnSettings] = useState<Record<string, { label: string; is_deleted: boolean }>>({});
+  const [columnSettings, setColumnSettings] = useState<
+    Record<string, { label: string; is_deleted: boolean }>
+  >({});
 
   // Auto-generate title helper: "{Size} {Unit} {Type} in {Area}"
   function buildAutoTitle(sz: string, un: string, typ: string, ar: string) {
@@ -135,7 +137,7 @@ export function ListingForm({
       if (listing) {
         setSerialNo(listing.serial_no || '');
         setTitle(listing.title || '');
-        setIsTitleManual(true); // Don't override existing title on edit
+        setIsTitleManual(true);
         setContactNumber(listing.contact_number || '');
         setPropertyType(listing.property_type || 'House');
         setStatus(listing.status === 'sold' ? 'sold' : 'available');
@@ -143,12 +145,13 @@ export function ListingForm({
         setArea(listing.area || '');
         setAddress(listing.address || '');
 
-        // Parse size and unit
         if (listing.size) {
           const match = listing.size.match(/^([\d.]+)\s*(.*)$/);
           if (match) {
             setSizeValue(match[1]);
-            const matchedUnit = SIZE_UNITS.find((u) => u.toLowerCase() === match[2].trim().toLowerCase());
+            const matchedUnit = SIZE_UNITS.find(
+              (u) => u.toLowerCase() === match[2].trim().toLowerCase()
+            );
             setSizeUnit(matchedUnit || 'Marla');
           } else {
             setSizeValue(listing.size);
@@ -166,10 +169,9 @@ export function ListingForm({
         setPotentialRent(listing.potential_rent || '');
         setUtilities(listing.utilities || '');
         setDocuments(listing.documents || '');
-        setDescription(listing.description || '');
+        setDescription(listing.description || listing.notes || '');
         setTags(listing.tags || []);
       } else {
-        // Reset form for fresh entry
         setIsTitleManual(false);
         setPropertyType('House');
         setSizeValue('');
@@ -190,7 +192,6 @@ export function ListingForm({
         setDescription('');
         setTags([]);
 
-        // Auto-assign next L- number based on count
         if (account?.id) {
           supabase
             .from('property_listings')
@@ -198,7 +199,7 @@ export function ListingForm({
             .eq('account_id', account.id)
             .then(({ count }) => {
               const nextNum = (count ?? 0) + 1;
-              setSerialNo(`L-${nextNum}`);
+              setSerialNo(`P-${nextNum}`);
             });
         }
       }
@@ -260,7 +261,10 @@ export function ListingForm({
       return;
     }
 
-    const finalTitle = title.trim() || buildAutoTitle(sizeValue, sizeUnit, propertyType, area) || 'Property Listing';
+    const finalTitle =
+      title.trim() ||
+      buildAutoTitle(sizeValue, sizeUnit, propertyType, area) ||
+      `Property ${serialNo || ''}`;
     const finalSize = sizeValue.trim() ? `${sizeValue.trim()} ${sizeUnit}` : null;
 
     setSaving(true);
@@ -319,35 +323,165 @@ export function ListingForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[88vh] overflow-y-auto border-border bg-card text-foreground">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-popover-foreground text-lg font-semibold flex items-center gap-2">
-              <Building2 className="size-5 text-primary" />
-              {isEdit ? t('editTitle') : t('addTitle')}
-            </DialogTitle>
-            {serialNo && (
-              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                {serialNo}
-              </span>
-            )}
-          </div>
-          <DialogDescription className="text-muted-foreground text-sm">
+          <DialogTitle className="text-foreground text-base">
+            {isEdit ? t('editTitle') : t('addTitle')}
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground text-xs">
             {isEdit
               ? 'Update this property listing’s specs, pricing, and availability.'
               : 'Add a new property or plot listing to your real estate inventory.'}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-          {/* 1. SIZE & UNIT + PROPERTY TYPE */}
+        <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
+          {/* Row 1: Sr No & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Size & Unit inline group */}
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Size / Area <span className="text-red-400">*</span>
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-serial" className="text-muted-foreground text-xs">
+                {columnSettings['serial_no']?.label || 'Sr No'}
               </Label>
-              <div className="flex rounded-md shadow-xs">
+              <Input
+                id="lf-serial"
+                value={serialNo}
+                onChange={(e) => setSerialNo(e.target.value)}
+                placeholder="e.g. P-1 or L-1"
+                className="bg-muted border-border font-mono text-xs text-foreground placeholder:text-muted-foreground h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-phone" className="text-muted-foreground text-xs">
+                {columnSettings['contact_number']?.label || 'Contact Phone'}
+              </Label>
+              <Input
+                id="lf-phone"
+                value={contactNumber}
+                onChange={(e) => setContactNumber(e.target.value)}
+                placeholder="e.g. 03278572797"
+                className="bg-muted border-border font-mono text-xs text-foreground placeholder:text-muted-foreground h-9"
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Property Title & Listing Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="lf-title" className="text-muted-foreground text-xs">
+                  {columnSettings['title']?.label || 'Property Title'}{' '}
+                  <span className="text-red-400">*</span>
+                </Label>
+                {isTitleManual && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTitleManual(false);
+                      setTitle(buildAutoTitle(sizeValue, sizeUnit, propertyType, area));
+                    }}
+                    className="text-[11px] text-primary hover:underline cursor-pointer"
+                  >
+                    Reset Auto
+                  </button>
+                )}
+              </div>
+              <Input
+                id="lf-title"
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setIsTitleManual(true);
+                }}
+                placeholder="e.g. 5 Marla House in Samanabad"
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9 font-medium"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs">
+                {columnSettings['status']?.label || 'Listing Status'}
+              </Label>
+              <Select
+                value={status}
+                onValueChange={(val) =>
+                  setStatus((val as PropertyListingStatus) || 'available')
+                }
+              >
+                <SelectTrigger className="bg-muted border-border text-xs text-foreground h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Row 3: City & Area / Society */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-city" className="text-muted-foreground text-xs">
+                City
+              </Label>
+              <Input
+                id="lf-city"
+                placeholder="e.g. Lahore, Islamabad"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-area" className="text-muted-foreground text-xs">
+                Area / Society <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                id="lf-area"
+                placeholder="e.g. Samanabad, DHA Phase 6"
+                value={area}
+                onChange={(e) => {
+                  setArea(e.target.value);
+                  updateAutoTitle(sizeValue, sizeUnit, propertyType, e.target.value);
+                }}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Row 4: Property Type & Size with Unit */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs">Property Type</Label>
+              <Select
+                value={propertyType}
+                onValueChange={(val) => {
+                  const nextType = val || 'House';
+                  setPropertyType(nextType);
+                  updateAutoTitle(sizeValue, sizeUnit, nextType, area);
+                }}
+              >
+                <SelectTrigger className="bg-muted border-border text-xs text-foreground h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROPERTY_TYPES.map((type) => (
+                    <SelectItem key={type} value={type} className="text-xs">
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground text-xs">
+                Size <span className="text-red-400">*</span>
+              </Label>
+              <div className="flex gap-1.5">
                 <Input
                   type="text"
                   placeholder="e.g. 5 or 7.5"
@@ -356,7 +490,7 @@ export function ListingForm({
                     setSizeValue(e.target.value);
                     updateAutoTitle(e.target.value, sizeUnit, propertyType, area);
                   }}
-                  className="rounded-r-none border-r-0 bg-muted border-border text-foreground placeholder:text-muted-foreground flex-1"
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground flex-1 h-9"
                   required
                 />
                 <Select
@@ -367,7 +501,7 @@ export function ListingForm({
                     updateAutoTitle(sizeValue, nextUnit, propertyType, area);
                   }}
                 >
-                  <SelectTrigger className="w-28 rounded-l-none bg-muted border-border text-foreground font-medium text-xs">
+                  <SelectTrigger className="w-24 bg-muted border-border text-xs text-foreground font-medium h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -380,268 +514,149 @@ export function ListingForm({
                 </Select>
               </div>
             </div>
-
-            {/* Property Type */}
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Property Type
-              </Label>
-              <Select
-                value={propertyType}
-                onValueChange={(val) => {
-                  const nextType = val || 'House';
-                  setPropertyType(nextType);
-                  updateAutoTitle(sizeValue, sizeUnit, nextType, area);
-                }}
-              >
-                <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROPERTY_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
-          {/* 2. AREA / SOCIETY & CITY */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                Area / Society <span className="text-red-400">*</span>
-              </Label>
-              <Input
-                placeholder="e.g. Harbanspura, DHA Phase 6"
-                value={area}
-                onChange={(e) => {
-                  setArea(e.target.value);
-                  updateAutoTitle(sizeValue, sizeUnit, propertyType, e.target.value);
-                }}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-sm font-medium">
-                City
-              </Label>
-              <Input
-                placeholder="e.g. Lahore, Islamabad"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
-          </div>
-
-          {/* 3. AUTO-GENERATED TITLE */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-muted-foreground text-sm font-medium flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-primary" />
-                Property Title (Auto-Generated)
-              </Label>
-              {isTitleManual && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsTitleManual(false);
-                    setTitle(buildAutoTitle(sizeValue, sizeUnit, propertyType, area));
-                  }}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Reset to Auto
-                </button>
-              )}
-            </div>
-            <Input
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setIsTitleManual(true);
-              }}
-              placeholder="e.g. 5 Marla House in Harbanspura"
-              className="bg-muted border-border text-foreground font-medium placeholder:text-muted-foreground"
-              required
-            />
-          </div>
-
-          {/* 4. DEMAND & STATUS */}
+          {/* Row 5: Demand & Potential Rent */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {!columnSettings['demand_price']?.is_deleted && (
-              <div className="space-y-2">
-                <Label className="text-muted-foreground text-sm font-medium">
+              <div className="space-y-1.5">
+                <Label htmlFor="lf-demand" className="text-muted-foreground text-xs">
                   {columnSettings['demand_price']?.label || 'Demand / Price'}
                 </Label>
                 <Input
+                  id="lf-demand"
                   placeholder="e.g. 2.2 Cr, 85 Lac"
                   value={demandPrice}
                   onChange={(e) => setDemandPrice(e.target.value)}
-                  className="bg-muted border-border text-foreground font-semibold placeholder:text-muted-foreground"
+                  className="bg-muted border-border text-xs text-foreground font-semibold placeholder:text-muted-foreground h-9"
                 />
               </div>
             )}
-
-            {!columnSettings['status']?.is_deleted && (
-              <div className="space-y-2">
-                <Label className="text-muted-foreground text-sm font-medium">
-                  {columnSettings['status']?.label || 'Listing Status'}
+            {!columnSettings['potential_rent']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="lf-rent" className="text-muted-foreground text-xs">
+                  {columnSettings['potential_rent']?.label || 'Potential Rent'}
                 </Label>
-                <Select
-                  value={status}
-                  onValueChange={(val) => setStatus((val as PropertyListingStatus) || 'available')}
-                >
-                  <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="lf-rent"
+                  placeholder="e.g. 45,000 / month"
+                  value={potentialRent}
+                  onChange={(e) => setPotentialRent(e.target.value)}
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
               </div>
             )}
           </div>
 
-          {/* 5. CONTACT NUMBER & STOREY */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {!columnSettings['contact_number']?.is_deleted && (
-              <div className="space-y-2">
-                <Label className="text-muted-foreground text-sm font-medium">
-                  {columnSettings['contact_number']?.label || 'Contact / Seller Phone'}
-                </Label>
-                <Input
-                  placeholder="e.g. 03278572797"
-                  value={contactNumber}
-                  onChange={(e) => setContactNumber(e.target.value)}
-                  className="bg-muted border-border text-foreground font-mono text-sm placeholder:text-muted-foreground"
-                />
-              </div>
-            )}
-
+          {/* Row 6: Dimensions & Storey */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {!columnSettings['storey']?.is_deleted && (
-              <div className="space-y-2">
-                <Label className="text-muted-foreground text-sm font-medium">
+              <div className="space-y-1.5">
+                <Label htmlFor="lf-storey" className="text-muted-foreground text-xs">
                   {columnSettings['storey']?.label || 'Storey / Floors'}
                 </Label>
                 <Input
-                  placeholder="e.g. Single Storey, Double Storey"
+                  id="lf-storey"
+                  placeholder="e.g. Double Storey"
                   value={storey}
                   onChange={(e) => setStorey(e.target.value)}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-front" className="text-muted-foreground text-xs">
+                Front Dimension
+              </Label>
+              <Input
+                id="lf-front"
+                placeholder="e.g. 25 ft"
+                value={frontDimension}
+                onChange={(e) => setFrontDimension(e.target.value)}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lf-length" className="text-muted-foreground text-xs">
+                Length Dimension
+              </Label>
+              <Input
+                id="lf-length"
+                placeholder="e.g. 50 ft"
+                value={lengthDimension}
+                onChange={(e) => setLengthDimension(e.target.value)}
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+              />
+            </div>
+          </div>
+
+          {/* Row 7: Utilities & Documents */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {!columnSettings['utilities']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="lf-utilities" className="text-muted-foreground text-xs">
+                  {columnSettings['utilities']?.label || 'Utilities'}
+                </Label>
+                <Input
+                  id="lf-utilities"
+                  placeholder="e.g. Electricity, Gas, Water"
+                  value={utilities}
+                  onChange={(e) => setUtilities(e.target.value)}
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
+                />
+              </div>
+            )}
+            {!columnSettings['documents']?.is_deleted && (
+              <div className="space-y-1.5">
+                <Label htmlFor="lf-docs" className="text-muted-foreground text-xs">
+                  {columnSettings['documents']?.label || 'Legal Documents'}
+                </Label>
+                <Input
+                  id="lf-docs"
+                  placeholder="e.g. Registry Inteqal, Transfer"
+                  value={documents}
+                  onChange={(e) => setDocuments(e.target.value)}
+                  className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
                 />
               </div>
             )}
           </div>
 
-          {/* 6. DIMENSIONS & FINANCIALS (Front, Length, Potential Rent) */}
-          {(!columnSettings['dimensions']?.is_deleted || !columnSettings['potential_rent']?.is_deleted) && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {!columnSettings['dimensions']?.is_deleted && (
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground text-sm font-medium">
-                      Front
-                    </Label>
-                    <Input
-                      placeholder="e.g. 30 ft"
-                      value={frontDimension}
-                      onChange={(e) => setFrontDimension(e.target.value)}
-                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground text-sm font-medium">
-                      Length
-                    </Label>
-                    <Input
-                      placeholder="e.g. 55 ft"
-                      value={lengthDimension}
-                      onChange={(e) => setLengthDimension(e.target.value)}
-                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-                    />
-                  </div>
-                </>
-              )}
-
-              {!columnSettings['potential_rent']?.is_deleted && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-sm font-medium">
-                    {columnSettings['potential_rent']?.label || 'Potential Rent'}
-                  </Label>
-                  <Input
-                    placeholder="e.g. 75,000/mo"
-                    value={potentialRent}
-                    onChange={(e) => setPotentialRent(e.target.value)}
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs sm:text-sm"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 7. ADDRESS & LANDMARKS */}
-          <div className="space-y-2">
-            <Label className="text-muted-foreground text-sm font-medium">
-              Detailed Address & Landmarks
+          {/* Row 8: Full Address */}
+          <div className="space-y-1.5">
+            <Label htmlFor="lf-address" className="text-muted-foreground text-xs">
+              Address
             </Label>
-            <Textarea
-              placeholder="e.g. Near Chirag Market, Farooq Medical store wali street..."
+            <Input
+              id="lf-address"
+              placeholder="e.g. House 14, Street 2, Near Farooq Hospital"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              rows={2}
-              className="bg-muted border-border text-foreground resize-none text-sm placeholder:text-muted-foreground"
+              className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
             />
           </div>
 
-          {/* 8. LEGAL DOCUMENTS & UTILITIES */}
-          {(!columnSettings['documents']?.is_deleted || !columnSettings['utilities']?.is_deleted) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {!columnSettings['documents']?.is_deleted && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-sm font-medium">
-                    {columnSettings['documents']?.label || 'Documents / Ownership'}
-                  </Label>
-                  <Input
-                    placeholder="e.g. Registry Inteqal, Fard"
-                    value={documents}
-                    onChange={(e) => setDocuments(e.target.value)}
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-              )}
+          {/* Row 9: Notes / Description */}
+          <div className="space-y-1.5">
+            <Label htmlFor="lf-desc" className="text-muted-foreground text-xs">
+              Notes / Description
+            </Label>
+            <Textarea
+              id="lf-desc"
+              rows={2}
+              placeholder="Additional remarks, owner details, or key highlights..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground resize-none"
+            />
+          </div>
 
-              {!columnSettings['utilities']?.is_deleted && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-sm font-medium">
-                    {columnSettings['utilities']?.label || 'Utilities Available'}
-                  </Label>
-                  <Input
-                    placeholder="e.g. Electricity, Gas, Water"
-                    value={utilities}
-                    onChange={(e) => setUtilities(e.target.value)}
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 9. TAGS */}
-          <div className="space-y-2">
-            <Label className="text-muted-foreground text-sm font-medium">Tags</Label>
-            <div className="flex items-center gap-2">
+          {/* Row 10: Tags */}
+          <div className="space-y-1.5">
+            <Label className="text-muted-foreground text-xs">Tags</Label>
+            <div className="flex gap-1.5">
               <Input
-                placeholder="Add tag (e.g. Urgent Sale, Corner, Main Boulevard)..."
+                placeholder="Add tag and click +"
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
                 onKeyDown={(e) => {
@@ -650,35 +665,33 @@ export function ListingForm({
                     handleAddTag();
                   }
                 }}
-                className="bg-muted border-border text-xs h-8 flex-1 placeholder:text-muted-foreground"
+                className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground h-9"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleAddTag}
-                disabled={!newTagName.trim()}
-                className="h-8 text-xs shrink-0"
+                className="h-9 px-3 border-border text-xs"
               >
-                <Plus className="size-3 mr-1" />
-                Add Tag
+                <Plus className="size-3.5 mr-1" />
+                Add
               </Button>
             </div>
-
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {tags.map((tag) => (
+                {tags.map((t) => (
                   <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-muted text-foreground border border-border"
+                    key={t}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-muted text-foreground border border-border"
                   >
-                    {tag}
+                    {t}
                     <button
                       type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="text-muted-foreground hover:text-foreground text-xs"
+                      onClick={() => handleRemoveTag(t)}
+                      className="text-muted-foreground hover:text-red-400 cursor-pointer"
                     >
-                      ×
+                      <X className="size-3" />
                     </button>
                   </span>
                 ))}
@@ -686,85 +699,47 @@ export function ListingForm({
             )}
           </div>
 
-          {/* 10. NOTES / DESCRIPTION */}
-          <div className="space-y-2">
-            <Label className="text-muted-foreground text-sm font-medium">
-              Additional Notes
-            </Label>
-            <Textarea
-              placeholder="e.g. Key selling points, possession ready, owner meeting details..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="bg-muted border-border text-foreground resize-none text-sm placeholder:text-muted-foreground"
-            />
-          </div>
-
-          {/* DYNAMIC CUSTOM FIELDS */}
+          {/* Row 11: Dynamic Custom Fields */}
           {customFields.length > 0 && (
-            <div className="space-y-3 pt-3 border-t border-border">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                Custom Fields ({customFields.length})
-              </Label>
+            <div className="border-t border-border pt-3 space-y-2.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Custom Fields
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {customFields.map((field) => {
-                  const val = customValues[field.field_name] || '';
-                  const opts =
-                    (field.field_options as { options?: string[] })?.options || [];
+                  const opts = (
+                    field.field_options as { options?: string[] } | null
+                  )?.options;
                   return (
                     <div key={field.id} className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
+                      <Label className="text-muted-foreground text-xs">
                         {field.field_name}
                       </Label>
-                      {field.field_type === 'select' ? (
+                      {field.field_type === 'select' && Array.isArray(opts) ? (
                         <Select
-                          value={val || undefined}
-                          onValueChange={(v) =>
+                          value={customValues[field.field_name] || ''}
+                          onValueChange={(val) =>
                             setCustomValues((prev) => ({
                               ...prev,
-                              [field.field_name]: v ?? '',
+                              [field.field_name]: val ?? '',
                             }))
                           }
                         >
-                          <SelectTrigger className="w-full bg-muted border-border text-foreground text-xs h-9">
-                            <SelectValue placeholder={`Select ${field.field_name}`} />
+                          <SelectTrigger className="bg-muted border-border text-xs text-foreground h-9 w-full">
+                            <SelectValue placeholder="Select..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {opts.map((opt) => (
-                              <SelectItem key={opt} value={opt} className="text-xs">
-                                {opt}
+                            {opts.map((op) => (
+                              <SelectItem key={op} value={op} className="text-xs">
+                                {op}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                      ) : field.field_type === 'number' ? (
-                        <Input
-                          type="number"
-                          value={val}
-                          onChange={(e) =>
-                            setCustomValues((prev) => ({
-                              ...prev,
-                              [field.field_name]: e.target.value,
-                            }))
-                          }
-                          placeholder={field.field_name}
-                          className="bg-muted border-border text-foreground text-xs h-9"
-                        />
-                      ) : field.field_type === 'date' ? (
-                        <Input
-                          type="date"
-                          value={val}
-                          onChange={(e) =>
-                            setCustomValues((prev) => ({
-                              ...prev,
-                              [field.field_name]: e.target.value,
-                            }))
-                          }
-                          className="bg-muted border-border text-foreground text-xs h-9"
-                        />
                       ) : (
                         <Input
-                          value={val}
+                          type={field.field_type === 'number' ? 'number' : 'text'}
+                          value={customValues[field.field_name] || ''}
                           onChange={(e) =>
                             setCustomValues((prev) => ({
                               ...prev,
@@ -782,32 +757,24 @@ export function ListingForm({
             </div>
           )}
 
-          {/* MODAL FOOTER - Matches ContactForm perfectly */}
-          <DialogFooter className="bg-popover border-border pt-2 border-t mt-4">
+          {/* MODAL FOOTER */}
+          <DialogFooter className="border-t border-border pt-3 gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={saving}
-              className="border-border text-muted-foreground hover:bg-muted"
+              className="border-border text-muted-foreground hover:bg-muted text-xs h-9"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={saving}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs h-9"
             >
-              {saving ? (
-                <>
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : isEdit ? (
-                'Save Changes'
-              ) : (
-                'Add Property'
-              )}
+              {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              {isEdit ? 'Save Changes' : 'Add Property'}
             </Button>
           </DialogFooter>
         </form>

@@ -21,7 +21,7 @@ export const DEFAULT_CONTACT_COLUMNS_DEF: {
   required?: boolean;
   options?: string[];
 }[] = [
-  { id: 'serial_no', defaultLabel: 'Sr No', fieldType: 'text' },
+  { id: 'serial_no', defaultLabel: 'Sr No', fieldType: 'text', required: true },
   { id: 'phone', defaultLabel: 'Number', fieldType: 'text', required: true },
   { id: 'name', defaultLabel: 'Name', fieldType: 'text' },
   { id: 'city', defaultLabel: 'City', fieldType: 'text' },
@@ -47,7 +47,7 @@ export const DEFAULT_LISTING_COLUMNS_DEF: {
   required?: boolean;
   options?: string[];
 }[] = [
-  { id: 'serial_no', defaultLabel: 'Sr No', fieldType: 'text' },
+  { id: 'serial_no', defaultLabel: 'Sr No', fieldType: 'text', required: true },
   { id: 'title', defaultLabel: 'Title', fieldType: 'text', required: true },
   {
     id: 'property_type',
@@ -227,6 +227,22 @@ export function formatDateCompact(dateStr?: string | null): string {
     month: 'short',
     year: 'numeric',
   });
+}
+
+/**
+ * Natural alphanumeric comparator for Serial Numbers (e.g. P-1, P-2, P-10, P-100, P-1381).
+ * Respects numeric order so P-2 comes before P-10 instead of standard string ordering.
+ */
+export function compareSerials(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  direction: 'asc' | 'desc' = 'asc'
+): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const cmp = a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  return direction === 'asc' ? cmp : -cmp;
 }
 
 

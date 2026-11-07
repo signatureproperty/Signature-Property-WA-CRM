@@ -61,6 +61,10 @@ import {
   Loader2,
   CheckCircle2,
   Upload,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { ListingForm } from '@/components/listings/listing-form';
 import { ListingDetailView } from '@/components/listings/listing-detail-view';
@@ -81,6 +85,7 @@ import {
   buildUnifiedListingColumns,
   DEFAULT_LISTING_COLUMNS_DEF,
   formatDateCompact,
+  compareSerials,
 } from '@/lib/columns/column-settings';
 import type { AccountColumnSetting } from '@/types';
 import { useTranslations } from 'next-intl';
@@ -293,6 +298,36 @@ export default function ListingsPage() {
     });
   }, [listings, search, filters]);
 
+  // Serial Sorting: 'asc' = 1 to forward; 'desc' = reverse
+  const [serialSortDirection, setSerialSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 25;
+
+  const toggleSerialSort = () => {
+    setSerialSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  // Sorted listings by serial_no naturally (P-1, P-2, P-10, P-100...)
+  const sortedListings = useMemo(() => {
+    const list = [...filteredListings];
+    list.sort((a, b) => compareSerials(a.serial_no, b.serial_no, serialSortDirection));
+    return list;
+  }, [filteredListings, serialSortDirection]);
+
+  // Reset page when filter/search/sort changes
+  useEffect(() => {
+    setPage(0);
+  }, [search, filters, serialSortDirection]);
+
+  const totalCount = sortedListings.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const hasPrev = page > 0;
+  const hasNext = (page + 1) * PAGE_SIZE < totalCount;
+
+  const paginatedListings = useMemo(() => {
+    return sortedListings.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  }, [sortedListings, page]);
+
   const hasActiveFilters = Boolean(search || countActiveFilters(filters) > 0);
 
   async function handleQuickStatusChange(listingId: string, newStatus: PropertyListingStatus) {
@@ -496,7 +531,36 @@ export default function ListingsPage() {
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
                   {isColVisible('serial_no') && (
-                    <TableHead className="w-20 text-xs text-muted-foreground">{getColLabel('serial_no', 'Sr No')}</TableHead>
+                    <TableHead className="w-24 text-xs text-muted-foreground select-none">
+                      <button
+                        type="button"
+                        onClick={toggleSerialSort}
+                        className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors group font-semibold text-xs py-1 cursor-pointer"
+                        title={
+                          serialSortDirection === 'asc'
+                            ? 'Sorted 1 to forward (click for reverse)'
+                            : 'Sorted reverse (click for 1 forward)'
+                        }
+                      >
+                        <span>{getColLabel('serial_no', 'Sr No')}</span>
+                        <span className="inline-flex flex-col -space-y-1">
+                          <ChevronUp
+                            className={`size-3 transition-colors ${
+                              serialSortDirection === 'asc'
+                                ? 'text-primary font-bold'
+                                : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                            }`}
+                          />
+                          <ChevronDown
+                            className={`size-3 transition-colors ${
+                              serialSortDirection === 'desc'
+                                ? 'text-primary font-bold'
+                                : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                            }`}
+                          />
+                        </span>
+                      </button>
+                    </TableHead>
                   )}
                   {isColVisible('title') && <TableHead className="text-xs text-muted-foreground">{getColLabel('title', 'Title & Details')}</TableHead>}
                   {isColVisible('property_type') && (
@@ -545,7 +609,7 @@ export default function ListingsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredListings.length === 0 ? (
+                ) : sortedListings.length === 0 ? (
                   <TableRow className="border-border">
                     <TableCell colSpan={columns.filter((c) => c.visible).length + 1} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
@@ -571,7 +635,7 @@ export default function ListingsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredListings.map((item) => {
+                  paginatedListings.map((item) => {
                   const statusInfo =
                     STATUS_BADGES[item.status] || STATUS_BADGES.available;
                   return (
@@ -836,7 +900,7 @@ export default function ListingsPage() {
       ) : (
         /* CARDS VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredListings.map((item) => {
+          {paginatedListings.map((item) => {
             const statusInfo =
               STATUS_BADGES[item.status] || STATUS_BADGES.available;
             return (
@@ -959,6 +1023,38 @@ export default function ListingsPage() {
         </div>
       )}
 
+      {/* PAGINATION BAR (identical to Contacts page) */}
+      {!loading && totalCount > 0 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-muted-foreground">
+            Showing {page * PAGE_SIZE + 1} to {Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount} listings
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!hasPrev}
+              onClick={() => setPage((p) => p - 1)}
+              className="border-border text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground px-2">
+              Page {page + 1} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!hasNext}
+              onClick={() => setPage((p) => p + 1)}
+              className="border-border text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ADD / EDIT FORM MODAL */}
       <ListingForm
         open={formOpen}
@@ -967,7 +1063,7 @@ export default function ListingsPage() {
         onSaved={fetchListings}
       />
 
-      {/* DETAIL VIEW MODAL */}
+      {/* DETAIL VIEW SHEET (Matches Contact Detail Sheet) */}
       <ListingDetailView
         open={detailOpen}
         onOpenChange={setDetailOpen}
@@ -981,6 +1077,7 @@ export default function ListingsPage() {
           setDeleteDialogOpen(true);
         }}
         onStatusChange={handleQuickStatusChange}
+        onUpdated={fetchListings}
       />
 
       {/* DELETE CONFIRMATION DIALOG */}

@@ -760,6 +760,7 @@ export interface PropertyListing {
   documents?: string | null;
   status: PropertyListingStatus;
   description?: string | null;
+  notes?: string | null;
   tags: string[];
   custom_fields: Record<string, string | number | boolean | null>;
   images: string[];
