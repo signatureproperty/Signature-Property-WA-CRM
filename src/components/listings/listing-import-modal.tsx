@@ -165,6 +165,7 @@ export function ListingImportModal({
           notes: r.notes || r.description || null,
           tags: r.tags || [],
           custom_fields: r.customFieldValues || {},
+          ...(r.created_at ? { created_at: r.created_at } : {}),
         }));
 
         const { data, error } = await supabase

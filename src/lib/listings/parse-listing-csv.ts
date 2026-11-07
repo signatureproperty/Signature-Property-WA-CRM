@@ -1,4 +1,12 @@
-import { parseCsvLine, normalizePhoneForImport, type DiscoveredCustomColumn } from '@/lib/contacts/parse-contact-csv';
+import {
+  parseCsvLine,
+  normalizePhoneForImport,
+  splitCsvRecords,
+  detectHeaderRowAndDelimiter,
+  findHeaderIndex,
+  normalizeHeaderName,
+  type DiscoveredCustomColumn,
+} from '@/lib/contacts/parse-contact-csv';
 
 export interface ParsedListingRow {
   serial_no?: string;
@@ -19,6 +27,7 @@ export interface ParsedListingRow {
   status: 'available' | 'sold';
   description?: string;
   notes?: string;
+  created_at?: string;
   tags: string[];
   /** Dynamic unmapped custom fields (e.g. { 'Commission': '1%', 'Plot No': '142' }) */
   customFieldValues?: Record<string, string>;
@@ -31,13 +40,77 @@ export interface ParseListingCsvResult {
   headers: string[];
 }
 
-function normalizeHeaderName(name: string): string {
-  return name.trim().toLowerCase().replace(/["']/g, '').replace(/[_\s]+/g, ' ');
-}
-
-function findHeaderIndex(headers: string[], synonyms: string[]): number {
-  return headers.findIndex((h) => synonyms.includes(normalizeHeaderName(h)));
-}
+export const LISTING_HEADER_KEYWORDS = [
+  'sr no',
+  'sr. no',
+  'sr_no',
+  'serial',
+  'reference',
+  'ref',
+  'p no',
+  'id',
+  'date',
+  'listing date',
+  'created',
+  'number',
+  'phone',
+  'contact',
+  'mobile',
+  'owner number',
+  'phone number',
+  'cell',
+  'whatsapp',
+  'city',
+  'area',
+  'location',
+  'sector',
+  'phase',
+  'address',
+  'full address',
+  'street',
+  'location detail',
+  'property type',
+  'propertytype',
+  'type',
+  'category',
+  'size',
+  'area size',
+  'plot size',
+  'storey',
+  'story',
+  'floors',
+  'floor',
+  'utilities',
+  'utility',
+  'facilities',
+  'status',
+  'potential rent',
+  'rent',
+  'rental',
+  'front',
+  'front dimension',
+  'width',
+  'length',
+  'length dimension',
+  'depth',
+  'demand',
+  'demand price',
+  'price',
+  'rate',
+  'cost',
+  'documents',
+  'docs',
+  'legal',
+  'title deed',
+  'title',
+  'property title',
+  'name',
+  'description',
+  'notes',
+  'remarks',
+  'tags',
+  'tag',
+];
 
 /**
  * Parses a Real Estate Property Listings CSV or TSV file.
@@ -46,8 +119,8 @@ function findHeaderIndex(headers: string[], synonyms: string[]): number {
  * Utilities, Status, Potential Rent, Front, Length, Demand, Documents.
  */
 export function parseListingCsv(text: string, currentListingCount = 0): ParseListingCsvResult {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) {
+  const records = splitCsvRecords(text);
+  if (records.length < 2) {
     return {
       rows: [],
       hasRecognizedColumns: false,
@@ -56,8 +129,8 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     };
   }
 
-  const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
-  const rawHeaders = parseCsvLine(lines[0], delimiter).map((h) => h.replace(/["']/g, '').trim());
+  const { headerLineIdx, delimiter } = detectHeaderRowAndDelimiter(records, LISTING_HEADER_KEYWORDS);
+  const rawHeaders = parseCsvLine(records[headerLineIdx], delimiter).map((h) => h.replace(/["']/g, '').trim());
   const headers = rawHeaders.map(normalizeHeaderName);
 
   const serialIdx = findHeaderIndex(headers, ['sr no', 'sr. no', 'sr_no', 'serial', 'reference', 'ref', 'p no', 'id']);
@@ -123,11 +196,12 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
 
   const rows: ParsedListingRow[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (let i = headerLineIdx + 1; i < records.length; i++) {
+    const line = records[i].trim();
     if (!line) continue;
 
     const values = parseCsvLine(line, delimiter);
+    if (values.every((v) => !v.trim())) continue;
 
     const rawSerial = serialIdx >= 0 ? values[serialIdx]?.replace(/["']/g, '').trim() : '';
     const dateVal = dateIdx >= 0 ? values[dateIdx]?.replace(/["']/g, '').trim() : '';
@@ -189,6 +263,14 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
     if (customDesc) descParts.push(customDesc);
     const description = descParts.length > 0 ? descParts.join('\n') : undefined;
 
+    let parsedCreatedAt: string | undefined = undefined;
+    if (dateVal) {
+      const d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        parsedCreatedAt = d.toISOString();
+      }
+    }
+
     // Collect custom columns
     const customValues: Record<string, string> = {};
     for (const cIdx of customColumnIndices) {
@@ -221,6 +303,7 @@ export function parseListingCsv(text: string, currentListingCount = 0): ParseLis
       status,
       description,
       notes: description || undefined,
+      created_at: parsedCreatedAt,
       tags: rowTags,
       customFieldValues: Object.keys(customValues).length > 0 ? customValues : undefined,
     });

@@ -33,3 +33,4 @@ ALTER TABLE ai_usage_log
 ALTER TABLE ai_usage_log
   ADD CONSTRAINT ai_usage_log_provider_check
   CHECK (provider IN ('openai', 'anthropic', 'openai_compatible', 'google'));
+

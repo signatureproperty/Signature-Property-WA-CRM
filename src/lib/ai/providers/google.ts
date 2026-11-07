@@ -70,3 +70,4 @@ export async function generateGoogle(args: ProviderArgs): Promise<ProviderResult
 
   return { text: text.trim(), usage }
 }
+

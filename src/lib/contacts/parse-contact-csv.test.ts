@@ -101,4 +101,23 @@ describe('parseContactCsv', () => {
     expect(result.rows[0].customFieldValues).toEqual({ Investor: 'Yes' });
     expect(result.discoveredCustomColumns.map((c) => c.name)).toEqual(['Investor']);
   });
+
+  it('parses contacts CSV when Google Sheet title row is present on row 0', () => {
+    const csv = `Signature Property Leads - Buyers,,,,,,,,
+Sr No,Date,Number,Name,City,Area,Property Type,Size,Budget,Investor,Notes
+1,24-Dec-25,03231430315,Buyer 1,Lahore,Samanabad,House,5 Marla,1 Cr,No,Interested in corner
+2,24-Dec-25,03117746262,Buyer 2,Lahore,Gulberg,Commercial,2 Marla,1.5 Cr,Yes,Urgent requirement`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasPhoneColumn).toBe(true);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0].phone).toBe('+923231430315');
+    expect(result.rows[0].name).toBe('Buyer 1');
+    expect(result.rows[0].city).toBe('Lahore');
+    expect(result.rows[0].area).toBe('Samanabad');
+    expect(result.rows[0].customFieldValues).toEqual({ Investor: 'No' });
+    expect(result.rows[1].phone).toBe('+923117746262');
+    expect(result.rows[1].name).toBe('Buyer 2');
+    expect(result.rows[1].customFieldValues).toEqual({ Investor: 'Yes' });
+  });
 });

@@ -92,17 +92,170 @@ export interface ParseContactCsvResult {
   headers: string[];
 }
 
-function normalizeHeaderName(name: string): string {
+export function normalizeHeaderName(name: string): string {
   return name.trim().toLowerCase().replace(/["']/g, '').replace(/[_\s]+/g, ' ');
 }
 
-function findHeaderIndex(headers: string[], synonyms: string[]): number {
+export function findHeaderIndex(headers: string[], synonyms: string[]): number {
   return headers.findIndex((h) => synonyms.includes(normalizeHeaderName(h)));
 }
 
+/**
+ * Splits CSV text into logical records/lines, properly handling
+ * double-quoted fields that contain newlines and CRLF/LF endings.
+ */
+export function splitCsvRecords(csvText: string): string[] {
+  const records: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    if (char === '"') {
+      if (inQuotes && csvText[i + 1] === '"') {
+        current += '""';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+        current += char;
+      }
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && csvText[i + 1] === '\n') {
+        i++;
+      }
+      if (current.trim().length > 0) {
+        records.push(current);
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim().length > 0) {
+    records.push(current);
+  }
+  return records;
+}
+
+/**
+ * Automatically locates the header row within the first few lines of a CSV/TSV,
+ * tolerating title/banner rows (e.g. from Google Sheets exports like "Signature Property,,,,,,,")
+ * and detects the best delimiter (\t, ,, ;).
+ */
+export function detectHeaderRowAndDelimiter(
+  records: string[],
+  candidateKeywords: string[]
+): { headerLineIdx: number; delimiter: string; score: number } {
+  if (records.length === 0) {
+    return { headerLineIdx: 0, delimiter: ',', score: 0 };
+  }
+
+  let bestIdx = 0;
+  let bestScore = 0;
+  let bestDelimiter = ',';
+
+  const firstLine = records[0] || '';
+  const fallbackDelimiter = firstLine.includes('\t')
+    ? '\t'
+    : firstLine.includes(';') && !firstLine.includes(',')
+      ? ';'
+      : ',';
+
+  const maxScan = Math.min(15, records.length);
+  for (let i = 0; i < maxScan; i++) {
+    const record = records[i];
+    if (!record || !record.trim()) continue;
+
+    for (const del of ['\t', ',', ';']) {
+      const cells = parseCsvLine(record, del).map(normalizeHeaderName);
+      let score = 0;
+      for (const cell of cells) {
+        if (!cell) continue;
+        if (candidateKeywords.some((k) => cell === k || cell.includes(k))) {
+          score++;
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+        bestDelimiter = del;
+      }
+    }
+  }
+
+  if (bestScore === 0) {
+    return { headerLineIdx: 0, delimiter: fallbackDelimiter, score: 0 };
+  }
+
+  return { headerLineIdx: bestIdx, delimiter: bestDelimiter, score: bestScore };
+}
+
+export const CONTACT_HEADER_KEYWORDS = [
+  'phone',
+  'number',
+  'phone number',
+  'phonenumber',
+  'mobile',
+  'mobile number',
+  'contact',
+  'contact number',
+  'cell',
+  'whatsapp',
+  'wa',
+  'ph',
+  'name',
+  'customer name',
+  'client name',
+  'full name',
+  'buyer name',
+  'buyer',
+  'lead name',
+  'email',
+  'e mail',
+  'email address',
+  'company',
+  'organization',
+  'agency',
+  'tags',
+  'tag',
+  'sr no',
+  'sr',
+  'srno',
+  'serial',
+  'serial no',
+  'serial_no',
+  's.no',
+  's no',
+  'id',
+  'city',
+  'area',
+  'location',
+  'sector',
+  'phase',
+  'property type',
+  'propertytype',
+  'type',
+  'category',
+  'size',
+  'area size',
+  'plot size',
+  'budget',
+  'demand',
+  'price',
+  'notes',
+  'note',
+  'remarks',
+  'comments',
+  'detail',
+  'date',
+  'created date',
+  'date entered',
+  'created_at',
+];
+
 export function parseContactCsv(text: string): ParseContactCsvResult {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) {
+  const records = splitCsvRecords(text);
+  if (records.length < 2) {
     return {
       rows: [],
       hasPhoneColumn: false,
@@ -113,8 +266,8 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     };
   }
 
-  const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
-  const rawHeaders = parseCsvLine(lines[0], delimiter).map((h) => h.replace(/["']/g, '').trim());
+  const { headerLineIdx, delimiter } = detectHeaderRowAndDelimiter(records, CONTACT_HEADER_KEYWORDS);
+  const rawHeaders = parseCsvLine(records[headerLineIdx], delimiter).map((h) => h.replace(/["']/g, '').trim());
   const headers = rawHeaders.map(normalizeHeaderName);
 
   // Phone column synonyms
@@ -209,11 +362,12 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     customColSamples[rawHeaders[cIdx]] = [];
   }
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (let i = headerLineIdx + 1; i < records.length; i++) {
+    const line = records[i].trim();
     if (!line) continue;
 
     const values = parseCsvLine(line, delimiter);
+    if (values.every((v) => !v.trim())) continue;
     const rawPhone = values[phoneIdx]?.replace(/["']/g, '').trim() ?? '';
     const phone = normalizePhoneForImport(rawPhone);
 
