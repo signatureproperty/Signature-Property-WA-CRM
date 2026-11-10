@@ -308,3 +308,54 @@ describe('generateReply — OpenAI-compatible', () => {
     expect(fetchMock.mock.calls[0][1].redirect).toBe('manual')
   })
 })
+
+describe('generateReply — Google Gemini', () => {
+  it('calls Google OpenAI-compatible chat completions endpoint and returns reply + usage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        choices: [{ message: { content: 'Gemini reply' } }],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({
+        provider: 'google',
+        model: 'gemini-3.8-flash',
+        apiKey: 'AIzaSy-test',
+      }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    expect(res).toEqual({
+      text: 'Gemini reply',
+      handoff: false,
+      usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 },
+    })
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions')
+    expect(opts.headers.Authorization).toBe('Bearer AIzaSy-test')
+    expect(JSON.parse(opts.body).model).toBe('gemini-3.8-flash')
+  })
+
+  it('maps Google 400 array invalid-key responses to invalid_key AiError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        errResponse(400, [
+          { error: { code: 400, message: 'API key not valid. Please pass a valid API key.' } },
+        ]),
+      ),
+    )
+
+    await expect(
+      generateReply({
+        config: config({ provider: 'google', model: 'gemini-3.8-flash', apiKey: 'bad-key' }),
+        systemPrompt: 'sys',
+        messages: [{ role: 'user', content: 'Hi' }],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_key', status: 401 })
+  })
+})

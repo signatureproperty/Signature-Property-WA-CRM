@@ -3,6 +3,7 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { loadAiConfig } from '@/lib/ai/config'
 import { retrieveKnowledge } from '@/lib/ai/knowledge'
+import { retrieveInventoryKnowledge } from '@/lib/ai/inventory-knowledge'
 import { generateReply } from '@/lib/ai/generate'
 import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
@@ -75,12 +76,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const knowledge = await retrieveKnowledge(
-      supabase,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    const [kbKnowledge, inventoryKnowledge] = await Promise.all([
+      retrieveKnowledge(
+        supabase,
+        accountId,
+        config,
+        latestUserMessage(messages),
+      ),
+      retrieveInventoryKnowledge(supabase, accountId, messages),
+    ])
+    const knowledge = [...inventoryKnowledge, ...kbKnowledge]
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',

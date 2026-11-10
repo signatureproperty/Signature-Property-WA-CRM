@@ -4,6 +4,7 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { loadAiConfig } from '@/lib/ai/config'
 import { buildConversationContext } from '@/lib/ai/context'
 import { retrieveKnowledge } from '@/lib/ai/knowledge'
+import { retrieveInventoryKnowledge } from '@/lib/ai/inventory-knowledge'
 import { generateReply } from '@/lib/ai/generate'
 import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
@@ -92,14 +93,17 @@ export async function POST(request: Request) {
       )
     }
 
-    // Ground the draft in the account's knowledge base (best-effort —
-    // returns [] when there's no KB or retrieval fails).
-    const knowledge = await retrieveKnowledge(
-      supabase,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    // Ground the draft in matching property inventory + knowledge base (best-effort).
+    const [kbKnowledge, inventoryKnowledge] = await Promise.all([
+      retrieveKnowledge(
+        supabase,
+        accountId,
+        config,
+        latestUserMessage(messages),
+      ),
+      retrieveInventoryKnowledge(supabase, accountId, messages),
+    ])
+    const knowledge = [...inventoryKnowledge, ...kbKnowledge]
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,

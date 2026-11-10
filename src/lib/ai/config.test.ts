@@ -50,4 +50,15 @@ describe('loadAiConfig requireActive', () => {
       await loadAiConfig(dbReturning(null), 'acct', { requireActive: false }),
     ).toBeNull()
   })
+
+  it('loads a Google Gemini config', async () => {
+    const config = await loadAiConfig(
+      dbReturning({ ...ROW, provider: 'google', model: 'gemini-3.8-flash' }),
+      'acct',
+      { requireActive: false },
+    )
+    expect(config).not.toBeNull()
+    expect(config!.provider).toBe('google')
+    expect(config!.model).toBe('gemini-3.8-flash')
+  })
 })

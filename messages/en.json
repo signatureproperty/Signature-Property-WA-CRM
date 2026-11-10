@@ -42,7 +42,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "aiChat": "AI Chat"
   },
   "Header": {
     "dashboard": "Dashboard",
@@ -60,7 +61,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "aiChat": "AI Chat"
   },
   "ModeToggle": {
     "switchMode": "Switch to {mode} mode"
@@ -2254,7 +2256,7 @@
     },
     "aiConfig": {
       "title": "Agent setup",
-      "description": "Bring your own OpenAI, Anthropic, or OpenAI-compatible API key. wacrm calls the provider directly with your key — no per-seat AI fees, and your data stays yours. This powers AI-drafted replies in the inbox, the auto-reply bot, and the Playground.",
+      "description": "Bring your own OpenAI, Google Gemini, Anthropic, or OpenAI-compatible API key. wacrm calls the provider directly with your key — no per-seat AI fees, and your data stays yours. This powers AI-drafted replies in the inbox, the auto-reply bot, and the Playground.",
       "adminOnlyConfig": "Only admins and owners can change the AI configuration.",
       "loadFailed": "Failed to load AI configuration",
       "providerAndKey": "Provider & key",
@@ -2447,6 +2449,23 @@
     "emptyTitle": "No notifications yet",
     "emptyDesc": "You'll see an alert here when someone assigns you a conversation.",
     "unread": "Unread"
+  },
+  "CrmAssistant": {
+    "title": "CRM AI Assistant",
+    "subtitle": "Ask about customers, properties, deals & live updates",
+    "emptyTitle": "Ask me anything about your CRM",
+    "emptyDesc": "Search property listings, look up customer details, check deals, or get live CRM updates in Urdu or English.",
+    "placeholder": "Ask about a customer, listing, or update…",
+    "thinking": "Checking CRM data…",
+    "reset": "Clear chat",
+    "expand": "Expand panel",
+    "collapse": "Collapse panel",
+    "close": "Close",
+    "send": "Send",
+    "goToSetup": "Configure AI Setup",
+    "notConfigured": "AI provider is not configured yet.",
+    "noReply": "Couldn't get a response.",
+    "unreachable": "Couldn't reach the CRM assistant."
   },
   "Agents": {
     "title": "AI Agents",
@@ -2913,7 +2932,7 @@
       "pausedRequired": "paused (boolean) is required",
       "updateConversationFailed": "Failed to update conversation",
       "loadConfigFailed": "Failed to load AI configuration",
-      "providerInvalid": "provider must be \"openai\", \"anthropic\", or \"openai_compatible\"",
+      "providerInvalid": "provider must be \"openai\", \"anthropic\", \"google\", or \"openai_compatible\"",
       "baseUrlRequired": "base_url is required for openai_compatible",
       "baseUrlInvalid": "base_url must be a valid http(s) URL",
       "modelRequired": "model is required",

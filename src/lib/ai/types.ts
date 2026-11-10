@@ -3,10 +3,25 @@
 //
 // One small provider-agnostic surface so the inbox draft route and the
 // inbound auto-reply bot both talk to `generateReply` without caring
-// whether the account is on OpenAI or Anthropic.
+// whether the account is on OpenAI, Google Gemini, or Anthropic.
 // ============================================================
 
-export type AiProvider = 'openai' | 'anthropic' | 'openai_compatible' | 'google'
+export const AI_PROVIDERS = [
+  'openai',
+  'anthropic',
+  'openai_compatible',
+  'google',
+] as const
+
+export type AiProvider = (typeof AI_PROVIDERS)[number]
+
+/** Type guard verifying an untrusted value is a supported AI provider. */
+export function isAiProvider(value: unknown): value is AiProvider {
+  return (
+    typeof value === 'string' &&
+    (AI_PROVIDERS as readonly string[]).includes(value)
+  )
+}
 
 /**
  * Account AI setup, decrypted and ready to use. Produced by

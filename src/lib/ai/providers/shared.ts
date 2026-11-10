@@ -64,7 +64,11 @@ export async function providerHttpError(
 ): Promise<AiError> {
   let detail = ''
   try {
-    const body = (await res.json()) as { error?: { message?: string } | string }
+    const raw = (await res.json()) as
+      | { error?: { message?: string } | string }
+      | { error?: { message?: string } | string }[]
+    // Google's OpenAI-compat endpoint can wrap error objects in a 1-element array.
+    const body = Array.isArray(raw) ? raw[0] : raw
     detail =
       typeof body?.error === 'string'
         ? body.error
@@ -74,12 +78,16 @@ export async function providerHttpError(
   }
 
   const { status } = res
-  const code =
-    status === 401 || status === 403
-      ? 'invalid_key'
-      : status === 429
-        ? 'rate_limited'
-        : 'provider_error'
+  // Google returns HTTP 400 (instead of 401) for malformed/invalid AIzaSy keys.
+  const isInvalidKey =
+    status === 401 ||
+    status === 403 ||
+    (status === 400 && /api[_ ]key.*(invalid|not valid)/i.test(detail))
+  const code = isInvalidKey
+    ? 'invalid_key'
+    : status === 429
+      ? 'rate_limited'
+      : 'provider_error'
   const base =
     code === 'invalid_key'
       ? t('ai.invalidKey', { provider })

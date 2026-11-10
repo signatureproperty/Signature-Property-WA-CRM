@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { LogOut, Menu, Settings as SettingsIcon, Sparkles, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Avatar,
   AvatarFallback,
@@ -41,11 +42,13 @@ interface HeaderProps {
   /** Wired to the shell's drawer state. Used only on mobile — the
    *  hamburger button is hidden on lg+. */
   onOpenSidebar?: () => void;
+  /** Opens the internal CRM AI Chat drawer. */
+  onOpenAiChat?: () => void;
 }
 
 import { useTranslations } from "next-intl";
 
-export function Header({ onOpenSidebar }: HeaderProps) {
+export function Header({ onOpenSidebar, onOpenAiChat }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
@@ -73,7 +76,19 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </h1>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {onOpenAiChat && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onOpenAiChat}
+            className="h-8 gap-1.5 border-primary/30 bg-primary/5 px-2.5 text-xs font-medium text-foreground hover:border-primary/50 hover:bg-primary/10"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span>{t("aiChat")}</span>
+          </Button>
+        )}
         <ModeToggle />
 
         <DropdownMenu>

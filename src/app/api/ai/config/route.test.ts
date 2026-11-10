@@ -134,4 +134,22 @@ describe('POST /api/ai/config stored key reuse', () => {
     ])
     expect(h.updates[0]).toMatchObject({ base_url: 'https://1.1.1.1/v1', api_key: 'enc:new-key' })
   })
+
+  it('validates and saves Google Gemini with a fresh API key', async () => {
+    const res = await post({
+      provider: 'google',
+      model: 'gemini-3.8-flash',
+      api_key: 'AIzaSy-test-key',
+    })
+    expect(res.status).toBe(200)
+    expect(h.validateCalls).toEqual([
+      { provider: 'google', apiKey: 'AIzaSy-test-key', baseUrl: null },
+    ])
+    expect(h.updates[0]).toMatchObject({
+      provider: 'google',
+      model: 'gemini-3.8-flash',
+      base_url: null,
+      api_key: 'enc:AIzaSy-test-key',
+    })
+  })
 })

@@ -1,5 +1,5 @@
 import { AiError, type ProviderResult } from '../types'
-import { MAX_OUTPUT_TOKENS } from '../defaults'
+import { AI_PROVIDER_DEFAULT_MODEL, MAX_OUTPUT_TOKENS } from '../defaults'
 import {
   mergeConsecutive,
   normalizeUsage,
@@ -12,6 +12,9 @@ import { getT } from '@/lib/i18n/translate'
 const t = getT('LibErrors')
 
 const GOOGLE_GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+// Gemini 3 reasoning models count internal thinking tokens against `max_tokens`,
+// so leave extra headroom above MAX_OUTPUT_TOKENS to avoid truncating replies.
+const GOOGLE_MAX_TOKENS = Math.max(MAX_OUTPUT_TOKENS, 2048)
 
 interface GoogleGeminiResponse {
   choices?: { message?: { content?: string } }[]
@@ -38,12 +41,12 @@ export async function generateGoogle(args: ProviderArgs): Promise<ProviderResult
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model || 'gemini-2.0-flash',
+        model: model || AI_PROVIDER_DEFAULT_MODEL.google,
         messages: [
           { role: 'system', content: systemPrompt },
           ...mergeConsecutive(messages),
         ],
-        max_tokens: MAX_OUTPUT_TOKENS,
+        max_tokens: GOOGLE_MAX_TOKENS,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     })

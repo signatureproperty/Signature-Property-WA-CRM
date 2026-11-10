@@ -60,7 +60,8 @@
     "defaultAvatar": "아바타",
     "menuProfile": "프로필",
     "menuSettings": "설정",
-    "menuSignOut": "로그아웃"
+    "menuSignOut": "로그아웃",
+    "aiChat": "AI 채팅"
   },
   "ModeToggle": {
     "switchMode": "{mode} 모드로 전환"
@@ -2254,7 +2255,7 @@
     },
     "aiConfig": {
       "title": "에이전트 설정",
-      "description": "OpenAI, Anthropic 또는 OpenAI 호환 API 키를 직접 사용하세요. wacrm은 입력한 키로 제공업체를 직접 호출하므로 좌석당 AI 요금이 없으며 데이터는 그대로 유지됩니다. 받은 키는 받은편지함 AI 초안, 자동 응답 봇, Playground에 사용됩니다.",
+      "description": "OpenAI, Google Gemini, Anthropic 또는 OpenAI 호환 API 키를 직접 사용하세요. wacrm은 입력한 키로 제공업체를 직접 호출하므로 좌석당 AI 요금이 없으며 데이터는 그대로 유지됩니다. 받은 키는 받은편지함 AI 초안, 자동 응답 봇, Playground에 사용됩니다.",
       "adminOnlyConfig": "관리자와 소유자만 AI 설정을 변경할 수 있습니다.",
       "loadFailed": "AI 설정을 불러오지 못했습니다",
       "providerAndKey": "공급자 & 키",
@@ -2447,6 +2448,23 @@
     "emptyTitle": "아직 알림이 없습니다",
     "emptyDesc": "누군가 대화를 배정하면 여기에 알림이 표시됩니다.",
     "unread": "읽지 않음"
+  },
+  "CrmAssistant": {
+    "title": "CRM AI 어시스턴트",
+    "subtitle": "고객, 매물, 거래 및 실시간 현황 질문",
+    "emptyTitle": "CRM 데이터에 대해 무엇이든 물어보세요",
+    "emptyDesc": "매물 검색, 고객 정보 조회, 파이프라인 거래 현황 또는 실시간 요약을 확인할 수 있습니다.",
+    "placeholder": "고객, 매물 또는 현황을 물어보세요…",
+    "thinking": "CRM 데이터 확인 중…",
+    "reset": "대화 초기화",
+    "expand": "패널 확장",
+    "collapse": "패널 축소",
+    "close": "닫기",
+    "send": "전송",
+    "goToSetup": "AI 설정으로 이동",
+    "notConfigured": "AI 공급자가 아직 설정되지 않았습니다.",
+    "noReply": "응답을 받을 수 없습니다.",
+    "unreachable": "CRM 어시스턴트에 연결할 수 없습니다."
   },
   "Agents": {
     "title": "AI 에이전트",
@@ -2913,7 +2931,7 @@
       "pausedRequired": "paused(불리언)는 필수입니다",
       "updateConversationFailed": "대화를 업데이트하지 못했습니다",
       "loadConfigFailed": "AI 설정을 불러오지 못했습니다",
-      "providerInvalid": "제공자는 \"openai\", \"anthropic\" 또는 \"openai_compatible\"이어야 합니다",
+      "providerInvalid": "제공자는 \"openai\", \"anthropic\", \"google\" 또는 \"openai_compatible\"이어야 합니다",
       "baseUrlRequired": "openai_compatible에는 base_url이 필수입니다",
       "baseUrlInvalid": "base_url은 올바른 http(s) URL이어야 합니다",
       "modelRequired": "모델은 필수입니다",

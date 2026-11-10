@@ -60,7 +60,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "aiChat": "Chat IA"
   },
   "ModeToggle": {
     "switchMode": "Mudar para o modo {mode}"
@@ -2254,7 +2255,7 @@
     },
     "aiConfig": {
       "title": "Configuração do agente",
-      "description": "Use sua própria chave da OpenAI, Anthropic ou de uma API compatível com OpenAI. O wacrm chama o provedor diretamente com sua chave — sem taxas de IA por assento, e seus dados continuam sob seu controle. Isso alimenta as respostas redigidas por IA, o bot de resposta automática e o Playground.",
+      "description": "Use sua própria chave da OpenAI, Google Gemini, Anthropic ou de uma API compatível com OpenAI. O wacrm chama o provedor diretamente com sua chave — sem taxas de IA por assento, e seus dados continuam sob seu controle. Isso alimenta as respostas redigidas por IA, o bot de resposta automática e o Playground.",
       "adminOnlyConfig": "Somente administradores e proprietários podem alterar a configuração de IA.",
       "loadFailed": "Falha ao carregar a configuração de IA",
       "providerAndKey": "Provedor e chave",
@@ -2447,6 +2448,23 @@
     "emptyTitle": "Nenhuma notificação ainda",
     "emptyDesc": "Você verá um alerta aqui quando alguém atribuir uma conversa a você.",
     "unread": "Não lidas"
+  },
+  "CrmAssistant": {
+    "title": "Assistente IA do CRM",
+    "subtitle": "Consulte clientes, imóveis, negócios e atualizações",
+    "emptyTitle": "Pergunte qualquer coisa sobre o seu CRM",
+    "emptyDesc": "Pesquise imóveis, consulte detalhes de clientes, negócios e resumos em tempo real.",
+    "placeholder": "Pergunte sobre um cliente, imóvel ou resumo…",
+    "thinking": "Consultando dados do CRM…",
+    "reset": "Limpar chat",
+    "expand": "Expandir painel",
+    "collapse": "Recolher painel",
+    "close": "Fechar",
+    "send": "Enviar",
+    "goToSetup": "Ir para Configuração de IA",
+    "notConfigured": "O provedor de IA ainda não está configurado.",
+    "noReply": "Não foi possível obter uma resposta.",
+    "unreachable": "Não foi possível alcançar o assistente."
   },
   "Agents": {
     "title": "Agentes de IA",
@@ -2913,7 +2931,7 @@
       "pausedRequired": "paused (booleano) é obrigatório",
       "updateConversationFailed": "Falha ao atualizar a conversa",
       "loadConfigFailed": "Falha ao carregar a configuração de IA",
-      "providerInvalid": "O provedor deve ser \"openai\", \"anthropic\" ou \"openai_compatible\"",
+      "providerInvalid": "O provedor deve ser \"openai\", \"anthropic\", \"google\" ou \"openai_compatible\"",
       "baseUrlRequired": "base_url é obrigatório para openai_compatible",
       "baseUrlInvalid": "base_url deve ser uma URL http(s) válida",
       "modelRequired": "O modelo é obrigatório",

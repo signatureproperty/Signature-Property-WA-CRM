@@ -100,4 +100,26 @@ describe('POST /api/ai/test stored key reuse', () => {
       { provider: 'openai_compatible', apiKey: 'new-key', baseUrl: 'https://1.1.1.1/v1' },
     ])
   })
+
+  it('accepts Google Gemini with a fresh API key', async () => {
+    const res = await post({
+      provider: 'google',
+      model: 'gemini-3.8-flash',
+      api_key: 'AIzaSy-test-key',
+    })
+    expect(res.status).toBe(200)
+    expect(h.validateCalls).toEqual([
+      { provider: 'google', apiKey: 'AIzaSy-test-key', baseUrl: null },
+    ])
+  })
+
+  it('rejects unsupported AI providers', async () => {
+    const res = await post({
+      provider: 'unknown_provider',
+      model: 'm',
+      api_key: 'k',
+    })
+    expect(res.status).toBe(400)
+    expect(h.validateCalls).toHaveLength(0)
+  })
 })

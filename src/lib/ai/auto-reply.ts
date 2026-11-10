@@ -2,6 +2,7 @@ import { supabaseAdmin } from './admin-client'
 import { loadAiConfig } from './config'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
+import { retrieveInventoryKnowledge } from './inventory-knowledge'
 import { generateReply } from './generate'
 import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
@@ -122,13 +123,12 @@ export async function dispatchInboundToAiReply(
       await showTypingIndicator(db, accountId, inboundMessageId)
     }
 
-    // Ground the reply in the account's knowledge base (best-effort).
-    const knowledge = await retrieveKnowledge(
-      db,
-      accountId,
-      config,
-      latestUserMessage(messages),
-    )
+    // Ground the reply in matching property inventory + knowledge base (best-effort).
+    const [kbKnowledge, inventoryKnowledge] = await Promise.all([
+      retrieveKnowledge(db, accountId, config, latestUserMessage(messages)),
+      retrieveInventoryKnowledge(db, accountId, messages),
+    ])
+    const knowledge = [...inventoryKnowledge, ...kbKnowledge]
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,

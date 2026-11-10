@@ -8,7 +8,7 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { validateAiCredentials } from '@/lib/ai/validate'
 import { embedTexts } from '@/lib/ai/embeddings'
-import { AiError, type AiProvider } from '@/lib/ai/types'
+import { AiError, isAiProvider, type AiProvider } from '@/lib/ai/types'
 import { normalizeOpenAiCompatibleBaseUrl } from '@/lib/ai/providers/openai-compatible'
 import { canReuseStoredAiKey } from '@/lib/ai/stored-key'
 import { getT } from '@/lib/i18n/translate'
@@ -82,15 +82,10 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') return bad(t('common.invalidRequestBody'))
 
-    const provider = body.provider as AiProvider
-    if (
-      provider !== 'openai' &&
-      provider !== 'anthropic' &&
-      provider !== 'openai_compatible' &&
-      provider !== 'google'
-    ) {
+    if (!isAiProvider(body.provider)) {
       return bad(t('ai.providerInvalid'))
     }
+    const provider = body.provider
     const model = typeof body.model === 'string' ? body.model.trim() : ''
     if (!model) return bad(t('ai.modelRequired'))
 
